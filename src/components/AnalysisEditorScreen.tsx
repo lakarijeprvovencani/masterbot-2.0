@@ -126,19 +126,29 @@ export const AnalysisEditorScreen: React.FC = () => {
 
     setLoading(true)
     try {
+      console.log('🚀 Pozivam saveUserBrain...')
+      
       // Sačuvaj analizu u bazu
       const result = await saveUserBrain({ analysis: analysisText })
+      console.log('📥 saveUserBrain rezultat:', result)
+      
       if (result.error) {
         console.error('❌ Greška pri čuvanju analize:', result.error)
+        setLoading(false)
         return
       }
 
       console.log('✅ Analiza uspešno sačuvana u bazi')
 
+      console.log('🚀 Pozivam updateProfile...')
+      
       // Označi onboarding završen
       const prof = await updateProfile({ onboarding_completed: true })
+      console.log('📥 updateProfile rezultat:', prof)
+      
       if (prof.error) {
         console.error('❌ Greška pri ažuriranju profila:', prof.error)
+        setLoading(false)
         return
       }
 
@@ -146,10 +156,10 @@ export const AnalysisEditorScreen: React.FC = () => {
       console.log('🎉 Onboarding završen - analiza sačuvana i profil kompletiran')
       
       // Pređi na completed ekran
+      console.log('🚀 Navigiram na /completed...')
       navigate('/completed', { replace: true })
     } catch (error) {
       console.error('❌ Greška pri čuvanju:', error)
-    } finally {
       setLoading(false)
     }
   }
