@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthContext'
+import React, { useState, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AuthForm } from './components/AuthForm'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { AIAnalysisScreen } from './components/AIAnalysisScreen'
@@ -16,9 +16,20 @@ import {
 
 const AuthPage: React.FC = () => {
   const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup')
+  const { user, profile } = useAuth()
+  const navigate = useNavigate()
+
+  // Ako je korisnik već ulogovan, preusmeri ga
+  useEffect(() => {
+    if (user && profile?.onboarding_completed) {
+      navigate('/dashboard', { replace: true })
+    } else if (user && !profile?.onboarding_completed) {
+      navigate('/onboarding', { replace: true })
+    }
+  }, [user, profile, navigate])
 
   const handleAuthSuccess = () => {
-    // Navigation će se desiti automatski preko ProtectedRoute
+    // Navigation će se desiti automatski preko useEffect-a
     console.log('✅ Auth uspešan, preusmeravam...')
   }
 
