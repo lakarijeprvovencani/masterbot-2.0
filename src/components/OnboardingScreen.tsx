@@ -507,7 +507,8 @@ export const OnboardingScreen: React.FC = () => {
               }
               
               console.log('🚀 Pokrećem AI analizu...')
-              finishOnboarding()
+              // Pređi na AI analizu stranicu
+              navigate('/ai-analysis', { replace: true })
             }} className="space-y-6">
               <div className="grid sm:grid-cols-2 gap-6">
                 <div>

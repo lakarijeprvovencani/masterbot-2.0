@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AuthForm } from './components/AuthForm'
 import { OnboardingScreen } from './components/OnboardingScreen'
+import { AIAnalysisScreen } from './components/AIAnalysisScreen'
+import { AnalysisEditorScreen } from './components/AnalysisEditorScreen'
+import { CompletedScreen } from './components/CompletedScreen'
 import { Loader2 } from 'lucide-react'
 
 const AuthPage: React.FC = () => {
@@ -92,6 +95,48 @@ const AppContent: React.FC = () => {
               <Navigate to="/dashboard" replace />
             ) : (
               <OnboardingScreen />
+            )
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } 
+      />
+      <Route 
+        path="/ai-analysis" 
+        element={
+          user ? (
+            profile?.onboarding_completed ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <AIAnalysisScreen />
+            )
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } 
+      />
+      <Route 
+        path="/analysis-editor" 
+        element={
+          user ? (
+            profile?.onboarding_completed ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <AnalysisEditorScreen />
+            )
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } 
+      />
+      <Route 
+        path="/completed" 
+        element={
+          user ? (
+            profile?.onboarding_completed ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <CompletedScreen />
             )
           ) : (
             <Navigate to="/" replace />
