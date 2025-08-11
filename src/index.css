@@ -12,13 +12,81 @@
   }
 }
 
+@keyframes neon-pulse {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(245, 110, 54, 0.5),
+                0 0 10px rgba(245, 110, 54, 0.3),
+                0 0 15px rgba(245, 110, 54, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(245, 110, 54, 0.8),
+                0 0 20px rgba(245, 110, 54, 0.6),
+                0 0 30px rgba(245, 110, 54, 0.4);
+  }
+}
+
+@keyframes cyberpunk-scan {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    filter: brightness(1) drop-shadow(0 0 5px rgba(245, 110, 54, 0.5));
+  }
+  50% {
+    filter: brightness(1.2) drop-shadow(0 0 20px rgba(245, 110, 54, 0.8));
+  }
+}
+
 .animate-spin-slow {
   animation: spin-slow 3s linear infinite;
+}
+
+.animate-neon-pulse {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+.animate-cyberpunk-scan {
+  background: linear-gradient(90deg, transparent, rgba(245, 110, 54, 0.2), transparent);
+  background-size: 200% 100%;
+  animation: cyberpunk-scan 3s linear infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
 }
 
 /* Hover efekti */
 .hover-scale:hover {
   transform: scale(1.05);
+}
+
+.hover-neon:hover {
+  box-shadow: 0 0 20px rgba(245, 110, 54, 0.6),
+              0 0 40px rgba(245, 110, 54, 0.4),
+              0 0 60px rgba(245, 110, 54, 0.2);
+}
+
+.hover-glow:hover {
+  filter: brightness(1.1) drop-shadow(0 0 15px rgba(245, 110, 54, 0.7));
 }
 
 /* Backdrop blur */
@@ -32,4 +100,71 @@
 
 .backdrop-blur-lg {
   backdrop-filter: blur(16px);
+}
+
+.backdrop-blur-xl {
+  backdrop-filter: blur(24px);
+}
+
+/* Glass morphism efekti */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-dark {
+  background: rgba(4, 10, 62, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Neon efekti */
+.neon-orange {
+  text-shadow: 0 0 5px rgba(245, 110, 54, 0.8),
+               0 0 10px rgba(245, 110, 54, 0.6),
+               0 0 15px rgba(245, 110, 54, 0.4);
+}
+
+.neon-border {
+  box-shadow: 0 0 10px rgba(245, 110, 54, 0.5),
+              inset 0 0 10px rgba(245, 110, 54, 0.1);
+}
+
+.neon-border-focus {
+  box-shadow: 0 0 15px rgba(245, 110, 54, 0.7),
+              0 0 25px rgba(245, 110, 54, 0.5),
+              inset 0 0 15px rgba(245, 110, 54, 0.2);
+  transition: box-shadow 0.15s ease-in-out;
+}
+
+/* Cyberpunk efekti */
+.cyberpunk-text {
+  background: linear-gradient(45deg, #fff, #F56E36, #fff);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: cyberpunk-scan 3s ease-in-out infinite;
+}
+
+/* Futuristic scrollbar */
+.futuristic-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.futuristic-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.futuristic-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #F56E36, #040A3E);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.futuristic-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #F56E36, #F56E36);
+  box-shadow: 0 0 10px rgba(245, 110, 54, 0.6);
 }
