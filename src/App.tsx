@@ -1,38 +1,25 @@
 import React, { useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
 import { AuthForm } from './components/AuthForm'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { AIAnalysisScreen } from './components/AIAnalysisScreen'
 import { AnalysisEditorScreen } from './components/AnalysisEditorScreen'
 import { CompletedScreen } from './components/CompletedScreen'
-import { Loader2 } from 'lucide-react'
+import { 
+  ProtectedRoute, 
+  AuthOnlyRoute, 
+  OnboardingRoute, 
+  DashboardRoute, 
+  PublicRoute 
+} from './components/ProtectedRoute'
 
 const AuthPage: React.FC = () => {
   const [authMode, setAuthMode] = useState<'signup' | 'login'>('signup')
-  const { user, profile } = useAuth()
 
   const handleAuthSuccess = () => {
-    // Navigation će se desiti automatski preko useEffect-a u AppContent
-  }
-
-  // Ako nema korisnika, sigurno prikaži auth formu
-  if (!user) {
-    return (
-      <AuthForm 
-        mode={authMode}
-        onModeChange={setAuthMode}
-        onSuccess={handleAuthSuccess}
-      />
-    )
-  }
-
-  if (user && profile?.onboarding_completed) {
-    return <Navigate to="/dashboard" replace />
-  }
-
-  if (user && !profile?.onboarding_completed) {
-    return <Navigate to="/onboarding" replace />
+    // Navigation će se desiti automatski preko ProtectedRoute
+    console.log('✅ Auth uspešan, preusmeravam...')
   }
 
   return (
@@ -48,112 +35,95 @@ const Dashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#040A3E]/90 to-[#040A3E]/80 p-8">
       <div className="text-center text-white">
-        <h1 className="text-4xl font-bold mb-4">Masterbot AI Dashboard - Uskoro!</h1>
-        <p className="text-white/70">Ovde će biti glavna aplikacija sa Masterbot AI marketing tools</p>
+        <h1 className="text-4xl font-bold mb-4">🎯 Masterbot AI Dashboard</h1>
+        <p className="text-white/70 mb-8">Dobrodošli u vašu AI marketing platformu!</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+            <h3 className="text-xl font-semibold mb-3">📊 Analiza Biznisa</h3>
+            <p className="text-white/70">Pregled vaših analiza i insights-a</p>
+          </div>
+          
+          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+            <h3 className="text-xl font-semibold mb-3">🚀 Marketing Strategije</h3>
+            <p className="text-white/70">AI-generisane strategije za vaš brend</p>
+          </div>
+          
+          <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+            <h3 className="text-xl font-semibold mb-3">📈 Performance Tracking</h3>
+            <p className="text-white/70">Praćenje rezultata vaših kampanja</p>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-const LoadingScreen: React.FC = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#040A3E] via-[#040A3E]/90 to-[#040A3E]/80">
-    <div className="text-center text-white">
-      <div className="w-20 h-20 bg-gradient-to-br from-[#F56E36]/20 to-[#040A3E]/20 rounded-2xl mx-auto mb-4 flex items-center justify-center backdrop-blur-sm border border-white/10 shadow-2xl">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-      <p className="text-white/70">Učitava se...</p>
-    </div>
-  </div>
-)
-
 const AppContent: React.FC = () => {
-  const { user, profile, loading } = useAuth()
-
-  if (loading) {
-    return <LoadingScreen />
-  }
-
   return (
     <Routes>
+      {/* Public Route - Auth Form */}
       <Route 
         path="/" 
         element={
-          !user ? (
+          <PublicRoute>
             <AuthPage />
-          ) : profile?.onboarding_completed ? (
-            <Navigate to="/dashboard" replace />
-          ) : (
-            <Navigate to="/onboarding" replace />
-          )
+          </PublicRoute>
         } 
       />
+      
+      {/* Protected Route - Onboarding (zahtevan auth, ali ne i onboarding) */}
       <Route 
         path="/onboarding" 
         element={
-          user ? (
-            profile?.onboarding_completed ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <OnboardingScreen />
-            )
-          ) : (
-            <Navigate to="/" replace />
-          )
+          <OnboardingRoute>
+            <OnboardingScreen />
+          </OnboardingRoute>
         } 
       />
-      <Route 
-        path="/ai-analysis" 
-        element={
-          user ? (
-            profile?.onboarding_completed ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <AIAnalysisScreen />
-            )
-          ) : (
-            <Navigate to="/" replace />
-          )
-        } 
-      />
-      <Route 
-        path="/analysis-editor" 
-        element={
-          user ? (
-            profile?.onboarding_completed ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <AnalysisEditorScreen />
-            )
-          ) : (
-            <Navigate to="/" replace />
-          )
-        } 
-      />
-      <Route 
-        path="/completed" 
-        element={
-          user ? (
-            profile?.onboarding_completed ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <CompletedScreen />
-            )
-          ) : (
-            <Navigate to="/" replace />
-          )
-        } 
-      />
+      
+      {/* Protected Route - Dashboard (zahtevan auth + onboarding) */}
       <Route 
         path="/dashboard" 
         element={
-          user && profile?.onboarding_completed ? (
+          <DashboardRoute>
             <Dashboard />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </DashboardRoute>
         } 
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      
+      {/* Protected Route - AI Analysis (zahtevan auth + onboarding) */}
+      <Route 
+        path="/ai-analysis" 
+        element={
+          <DashboardRoute>
+            <AIAnalysisScreen />
+          </DashboardRoute>
+        } 
+      />
+      
+      {/* Protected Route - Analysis Editor (zahtevan auth + onboarding) */}
+      <Route 
+        path="/analysis-editor" 
+        element={
+          <DashboardRoute>
+            <AnalysisEditorScreen />
+          </DashboardRoute>
+        } 
+      />
+      
+      {/* Protected Route - Completed (zahtevan auth + onboarding) */}
+      <Route 
+        path="/completed" 
+        element={
+          <DashboardRoute>
+            <CompletedScreen />
+          </DashboardRoute>
+        } 
+      />
+      
+      {/* Catch-all route */}
+      <Route path="*" element={<PublicRoute><AuthPage /></PublicRoute>} />
     </Routes>
   )
 }

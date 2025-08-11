@@ -231,9 +231,12 @@ export const OnboardingScreen: React.FC = () => {
                   }
                   setShowEditor(false)
                   setCompleted(true)
+                  console.log('🎉 Onboarding završen - analiza sačuvana i profil kompletiran')
+                  
+                  // Automatski preusmeri na dashboard nakon 2 sekunde
                   setTimeout(() => {
-                    console.log('🎉 Onboarding završen - analiza sačuvana i profil kompletiran')
-                  }, 1000)
+                    navigate('/dashboard', { replace: true })
+                  }, 2000)
                 }}
                 className="px-5 py-2 rounded-lg bg-[#F56E36] text-white font-semibold hover:bg-[#F56E36]/90"
               >Sačuvaj i nastavi</button>

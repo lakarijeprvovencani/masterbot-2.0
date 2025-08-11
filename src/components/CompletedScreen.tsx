@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import masterbotLogo from '../assets/images/logobotprovidan.png'
@@ -6,6 +6,15 @@ import masterbotLogo from '../assets/images/logobotprovidan.png'
 export const CompletedScreen: React.FC = () => {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
+
+  // Automatski preusmeri na dashboard nakon 3 sekunde
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigate('/dashboard', { replace: true })
+    }, 3000)
+
+    return () => clearTimeout(timer)
+  }, [navigate])
 
   const handleLogout = async () => {
     try {
