@@ -216,8 +216,9 @@ export const OnboardingScreen: React.FC = () => {
                 type="button"
                 onClick={async () => {
                   if (!user?.id) return
-                  // Sačuvaj analizu u user_brain.data.analysis
-                  const result = await saveUserBrain({ data: { analysis: analysisText } })
+                  // Sačuvaj analizu u user_brain.analysis
+                  console.log('💾 Čuvam ručno unetu analizu:', { analysis_length: analysisText.length })
+                  const result = await saveUserBrain({ analysis: analysisText })
                   if (result.error) {
                     console.error('❌ Greška pri čuvanju analize:', result.error)
                     return
