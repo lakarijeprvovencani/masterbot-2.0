@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AuthForm } from './components/AuthForm'
@@ -11,6 +11,17 @@ const AuthPage: React.FC = () => {
 
   const handleAuthSuccess = () => {
     // Navigation će se desiti automatski preko useEffect-a u AppContent
+  }
+
+  // Ako nema korisnika, sigurno prikaži auth formu
+  if (!user) {
+    return (
+      <AuthForm 
+        mode={authMode}
+        onModeChange={setAuthMode}
+        onSuccess={handleAuthSuccess}
+      />
+    )
   }
 
   if (user && profile?.onboarding_completed) {
@@ -64,14 +75,12 @@ const AppContent: React.FC = () => {
       <Route 
         path="/" 
         element={
-          user ? (
-            profile?.onboarding_completed ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <Navigate to="/onboarding" replace />
-            )
-          ) : (
+          !user ? (
             <AuthPage />
+          ) : profile?.onboarding_completed ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <Navigate to="/onboarding" replace />
           )
         } 
       />
@@ -99,6 +108,7 @@ const AppContent: React.FC = () => {
           )
         } 
       />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

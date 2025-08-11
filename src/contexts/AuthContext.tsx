@@ -16,6 +16,16 @@ export interface Profile {
   is_admin?: boolean
 }
 
+export interface UserBrain {
+  user_id: string
+  company_name?: string
+  industry?: string
+  goals?: string[]
+  website?: string
+  data?: Record<string, unknown>
+  analysis?: string
+}
+
 interface AuthContextType {
   user: User | null
   profile: Profile | null
@@ -25,6 +35,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<{ error?: string }>
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<Profile>) => Promise<{ error?: string }>
+  saveUserBrain: (payload: Partial<UserBrain>) => Promise<{ error?: string }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -46,23 +57,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Učitaj session na startu
   useEffect(() => {
+    let isMounted = true
+
+    // Fail-safe: ako se nešto zaglavi, ugasi loading posle 3s
+    const failSafe = setTimeout(() => {
+      if (isMounted) setLoading(false)
+    }, 3000)
+
+    const hasEnv = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
+
     const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user || null)
-      if (session?.user) await fetchProfile(session.user.id)
-      setLoading(false)
+      try {
+        if (!hasEnv) {
+          console.warn('Supabase env varijable nisu postavljene. Preskačem auth inicijalizaciju.')
+          return
+        }
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!isMounted) return
+        setUser(session?.user || null)
+        if (session?.user) await fetchProfile(session.user.id)
+      } catch (error) {
+        console.error('Greška pri inicijalnom učitavanju sesije:', error)
+      } finally {
+        if (isMounted) setLoading(false)
+        clearTimeout(failSafe)
+      }
     }
+
     initSession()
 
-    // Slušaj promene
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_, session) => {
+      if (!isMounted) return
       setUser(session?.user || null)
       if (session?.user) await fetchProfile(session.user.id)
       else setProfile(null)
       setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      clearTimeout(failSafe)
+      listener.subscription.unsubscribe()
+    }
   }, [])
 
   const fetchProfile = async (userId: string) => {
@@ -83,30 +119,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('🚀 Počinjem signup proces...', { email, fullName })
       
-      // Prvo kreiraj korisnika
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: {
-            full_name: fullName
-          }
+          data: { full_name: fullName }
         }
       })
 
       console.log('📊 Supabase auth response:', { data, error })
 
-      if (error) {
-        console.error('❌ Greška pri signup:', error)
-        return { error: error.message }
-      }
+      if (error) return { error: error.message }
 
       if (data.user) {
-        console.log('✅ Korisnik kreiran:', data.user.id)
-        
-        // Kreiraj profil ručno - bez trigger funkcije
         try {
-          console.log('🔧 Kreiram profil ručno...')
           const { error: profileError } = await supabase
             .from('profiles')
             .insert({
@@ -116,31 +142,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               onboarding_completed: false,
               is_admin: false
             })
-          
-          if (profileError) {
-            console.error('❌ Greška pri kreiranju profila:', profileError)
-            // Ne vraćaj grešku - možda profil već postoji
-            console.log('⚠️ Profil možda već postoji ili je kreiran automatski')
-          } else {
-            console.log('✅ Profil kreiran uspešno')
-          }
+          if (profileError) console.error('Greška pri kreiranju profila:', profileError)
+
+          // Inicijalni red u user_brain (ako ne postoji)
+          const { error: brainError } = await supabase
+            .from('user_brain')
+            .upsert({ user_id: data.user.id }, { onConflict: 'user_id' })
+          if (brainError) console.error('Greška pri kreiranju user_brain:', brainError)
         } catch (profileErr) {
-          console.error('❌ Exception pri kreiranju profila:', profileErr)
-          // Ne vraćaj grešku - možda profil već postoji
-          console.log('⚠️ Profil možda već postoji')
+          console.error('Exception pri kreiranju profila/brain:', profileErr)
         }
       }
 
-      // Ako je email konfirmacija potrebna, vrati poruku
       if (data.user && !data.session) {
-        console.log('📧 Email konfirmacija potrebna')
         return { error: 'Molimo vas da proverite vaš email i kliknite na link za potvrdu naloga.' }
       }
 
-      console.log('🎉 Signup uspešan!')
       return {}
     } catch (err: any) {
-      console.error('❌ Exception u signUp:', err)
       return { error: err.message }
     }
   }
@@ -169,7 +188,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    try {
+      // Prvo: sinhrono ukloni sve Supabase session ključeve da spreči auto-restore
+      try {
+        const lsKeys: string[] = []
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const k = localStorage.key(i)
+          if (k) lsKeys.push(k)
+        }
+        lsKeys.filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k))
+
+        const ssKeys: string[] = []
+        for (let i = 0; i < sessionStorage.length; i += 1) {
+          const k = sessionStorage.key(i)
+          if (k) ssKeys.push(k)
+        }
+        ssKeys.filter(k => k.startsWith('sb-')).forEach(k => sessionStorage.removeItem(k))
+      } catch (e) {
+        console.warn('Upozorenje pri čišćenju storage-a tokom odjave:', e)
+      }
+
+      // Zatim: supabase odjava
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.error('Greška pri signOut:', e)
+    } finally {
+      setUser(null)
+      setProfile(null)
+      setLoading(false)
+    }
   }
 
   const updateProfile = async (updates: Partial<Profile>) => {
@@ -184,16 +231,68 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return {}
   }
 
-  const value: AuthContextType = {
-    user,
-    profile,
-    loading,
-    signUp,
-    signIn,
-    signInWithGoogle,
-    signOut,
-    updateProfile
+  const saveUserBrain = async (payload: Partial<UserBrain>) => {
+    if (!user) return { error: 'Nema prijavljenog korisnika' }
+
+    console.log('🧠 saveUserBrain pozvan sa:', { user_id: user.id, payload })
+
+    // Proveri da li red već postoji
+    const { data: existing, error: selectError } = await supabase
+      .from('user_brain')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+
+    if (selectError && selectError.code !== 'PGRST116') {
+      console.error('❌ user_brain select error:', selectError)
+      return { error: selectError.message }
+    }
+
+    // Pripremi update/insert objekat samo sa definisanim poljima
+    const fields: any = { updated_at: new Date().toISOString() }
+    if (payload.company_name !== undefined) fields.company_name = payload.company_name
+    if (payload.industry !== undefined) fields.industry = payload.industry
+    if (payload.goals !== undefined) fields.goals = payload.goals
+    if (payload.website !== undefined) fields.website = payload.website
+    if (payload.analysis !== undefined) fields.analysis = payload.analysis
+    if (payload.data !== undefined) {
+      if (existing && (existing as any).data && typeof (existing as any).data === 'object') {
+        fields.data = { ...(existing as any).data, ...payload.data }
+      } else {
+        fields.data = payload.data
+      }
+    }
+
+    console.log('📝 Pripremljeni fields za user_brain:', fields)
+
+    if (existing) {
+      console.log('🔄 Ažuriram postojeći user_brain red...')
+      const { error } = await supabase
+        .from('user_brain')
+        .update(fields)
+        .eq('user_id', user.id)
+      if (error) {
+        console.error('❌ user_brain update error:', error)
+        return { error: error.message }
+      }
+      console.log('✅ user_brain uspešno ažuriran')
+      return {}
+    } else {
+      console.log('🆕 Kreiram novi user_brain red...')
+      const insertObj = { user_id: user.id, ...fields }
+      const { error } = await supabase
+        .from('user_brain')
+        .insert(insertObj)
+      if (error) {
+        console.error('❌ user_brain insert error:', error)
+        return { error: error.message }
+      }
+      console.log('✅ user_brain uspešno kreiran')
+      return {}
+    }
   }
+
+  const value: AuthContextType = { user, profile, loading, signUp, signIn, signInWithGoogle, signOut, updateProfile, saveUserBrain }
 
   return (
     <AuthContext.Provider value={value}>
