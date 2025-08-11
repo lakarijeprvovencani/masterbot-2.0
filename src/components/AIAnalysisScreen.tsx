@@ -5,7 +5,7 @@ import { processOnboardingAnalysis } from '../lib/ai'
 import masterbotLogo from '../assets/images/logobotprovidan.png'
 
 export const AIAnalysisScreen: React.FC = () => {
-  const { user, saveUserBrain } = useAuth()
+  const { user, saveUserBrain, updateProfile } = useAuth()
   const navigate = useNavigate()
   const [analysisStage, setAnalysisStage] = useState<string>('Pripremam podatke...')
   const [analysis, setAnalysis] = useState<string>('')
@@ -46,6 +46,14 @@ export const AIAnalysisScreen: React.FC = () => {
           console.error('❌ Greška pri čuvanju analysis polja:', res.error)
         } else {
           console.log('✅ AI analiza uspešno sačuvana u bazu')
+        }
+        
+        // Označi onboarding završen ODMAH nakon što se AI analiza završi
+        const prof = await updateProfile({ onboarding_completed: true })
+        if (prof.error) {
+          console.error('❌ Greška pri ažuriranju profila:', prof.error)
+        } else {
+          console.log('✅ Onboarding označen kao završen - korisnik može pristupiti dashboard-u')
         }
         
         // Pređi na editor nakon 2 sekunde
