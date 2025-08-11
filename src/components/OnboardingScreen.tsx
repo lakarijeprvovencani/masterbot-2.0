@@ -155,10 +155,15 @@ export const OnboardingScreen: React.FC = () => {
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }))
+    console.log('📝 Input change:', { name: e.target.name, value: e.target.value })
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        [e.target.name]: e.target.value
+      }
+      console.log('🔄 New form data:', newData)
+      return newData
+    })
   }
 
   if (completed) {
@@ -297,9 +302,21 @@ export const OnboardingScreen: React.FC = () => {
               noValidate
               onSubmit={async (e) => {
                 e.preventDefault()
-                if (!formData.company_name || !formData.industry) return
-                
                 console.log('🚀 Step 1 submit - početak...')
+                console.log('📋 Form data pre validacije:', formData)
+                console.log('🔍 Validacija:', { 
+                  company_name: !!formData.company_name, 
+                  industry: !!formData.industry,
+                  company_name_value: formData.company_name,
+                  industry_value: formData.industry
+                })
+                
+                if (!formData.company_name || !formData.industry) {
+                  console.log('❌ Validacija neuspešna - vraćam')
+                  return
+                }
+                
+                console.log('✅ Validacija uspešna - nastavljam')
                 console.log('💾 Čuvam brain (step1)...', { formData, user_id: user?.id })
                 
                 const result = await saveUserBrain({ company_name: formData.company_name, industry: formData.industry })
