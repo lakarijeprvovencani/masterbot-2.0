@@ -103,25 +103,25 @@ const AppContent: React.FC = () => {
         } 
       />
       
-      {/* Protected Route - AI Analysis (zahtevan auth + onboarding) */}
-      <Route 
-        path="/ai-analysis" 
-        element={
-          <DashboardRoute>
-            <AIAnalysisScreen />
-          </DashboardRoute>
-        } 
-      />
-      
-      {/* Protected Route - Analysis Editor (zahtevan auth + onboarding) */}
-      <Route 
-        path="/analysis-editor" 
-        element={
-          <DashboardRoute>
-            <AnalysisEditorScreen />
-          </DashboardRoute>
-        } 
-      />
+                   {/* Protected Route - AI Analysis (zahtevan auth, ali NE i onboarding) */}
+             <Route
+               path="/ai-analysis"
+               element={
+                 <OnboardingRoute>
+                   <AIAnalysisScreen />
+                 </OnboardingRoute>
+               }
+             />
+
+             {/* Protected Route - Analysis Editor (zahtevan auth, ali NE i onboarding) */}
+             <Route
+               path="/analysis-editor"
+               element={
+                 <OnboardingRoute>
+                   <AnalysisEditorScreen />
+                 </OnboardingRoute>
+               }
+             />
       
       {/* Protected Route - Completed (zahtevan auth + onboarding) */}
       <Route 
