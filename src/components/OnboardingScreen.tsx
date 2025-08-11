@@ -298,14 +298,24 @@ export const OnboardingScreen: React.FC = () => {
               onSubmit={async (e) => {
                 e.preventDefault()
                 if (!formData.company_name || !formData.industry) return
+                
+                console.log('🚀 Step 1 submit - početak...')
                 console.log('💾 Čuvam brain (step1)...', { formData, user_id: user?.id })
+                
                 const result = await saveUserBrain({ company_name: formData.company_name, industry: formData.industry })
+                
                 if (result.error) {
                   console.error('❌ Greška pri čuvanju brain (step1):', result.error)
+                  return
                 } else {
                   console.log('✅ Brain uspešno sačuvan (step1)')
                 }
-                setStep(s => Math.min(totalSteps, s + 1))
+                
+                console.log('🔄 Pre step promene - trenutni step:', step)
+                const newStep = Math.min(totalSteps, step + 1)
+                console.log('🔄 Postavljam novi step:', newStep)
+                setStep(newStep)
+                console.log('🔄 Step promenjen na:', newStep)
               }}
               className="space-y-6"
             >
