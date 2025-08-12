@@ -29,6 +29,7 @@ export interface UserBrain {
 interface AuthContextType {
   user: User | null
   profile: Profile | null
+  userBrain: UserBrain | null
   loading: boolean
   signUp: (email: string, password: string, fullName: string) => Promise<{ error?: string }>
   signIn: (email: string, password: string) => Promise<{ error?: string }>
@@ -36,6 +37,7 @@ interface AuthContextType {
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<Profile>) => Promise<{ error?: string }>
   saveUserBrain: (payload: Partial<UserBrain>) => Promise<{ error?: string }>
+  fetchUserBrain: (userId: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -53,6 +55,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [userBrain, setUserBrain] = useState<UserBrain | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Učitaj session na startu
@@ -86,11 +89,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initSession()
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🪝 onAuthStateChange', { event, hasSession: Boolean(session), userId: session?.user?.id })
       if (!isMounted) return
       setUser(session?.user || null)
-      if (session?.user) await fetchProfile(session.user.id)
-      else setProfile(null)
+      if (session?.user) {
+        console.log('🔄 onAuthStateChange poziva fetchProfile...')
+        await fetchProfile(session.user.id)
+        console.log('✅ onAuthStateChange fetchProfile završen')
+      } else {
+        setProfile(null)
+        setUserBrain(null)
+      }
       setLoading(false)
     })
 
@@ -103,23 +113,127 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const fetchProfile = async (userId: string) => {
     console.log('🔄 fetchProfile pozvan za user ID:', userId)
+    console.log('🔗 Supabase client:', !!supabase)
+    
+    try {
+      console.log('📡 Pozivam supabase.from("profiles")...')
+      
+      // Dodaj timeout za Supabase poziv
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Supabase timeout')), 5000)
+      )
+      
+      const supabasePromise = supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      
+      const result = await Promise.race([supabasePromise, timeoutPromise]) as any
+      const { data, error } = result
+
+      console.log('📋 fetchProfile rezultat:', { data, error })
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Greška pri učitavanju profila:', error)
+        return
+      }
+
+    // Ako profil ne postoji (PGRST116) ili je data prazno, kreiraj ga odmah da se app ne zaglavi
+    if ((error && error.code === 'PGRST116') || !data) {
+      console.warn('ℹ️ Profil ne postoji – kreiram inicijalni profil...')
+      const { data: userInfo } = await supabase.auth.getUser()
+      const email = userInfo.user?.email || ''
+      const insertObj = {
+        id: userId,
+        email,
+        full_name: userInfo.user?.user_metadata?.full_name || null,
+        onboarding_completed: false,
+        is_admin: false,
+      } as any
+      const { error: insertError } = await supabase.from('profiles').insert(insertObj)
+      if (insertError) {
+        console.error('❌ Greška pri kreiranju inicijalnog profila:', insertError)
+      }
+      // Postavi minimalni profil u state čak i ako insert nije odmah vidljiv
+      const minimalProfile: Profile = {
+        id: userId,
+        email,
+        full_name: insertObj.full_name || undefined,
+        company_name: undefined,
+        industry: undefined,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        onboarding_completed: false,
+        is_admin: false,
+      }
+      setProfile(minimalProfile)
+      console.log('✅ Kreiran i postavljen inicijalni profil')
+    } else {
+      console.log('📥 Profile podaci iz baze:', data)
+      console.log('🎯 onboarding_completed:', data?.onboarding_completed)
+      setProfile(data)
+      console.log('✅ Profile state ažuriran')
+    }
+
+      // Učitaj i user_brain podatke u pozadini da ne blokira auth loading/navigaciju
+      fetchUserBrain(userId).catch(err => {
+        console.warn('fetchUserBrain background error:', err)
+      })
+      
+      console.log('🏁 fetchProfile završen uspešno')
+    } catch (fetchError) {
+      console.error('❌ fetchProfile catch error:', fetchError)
+      
+      // Ako je timeout ili druga greška, kreiraj fallback profil
+      if ((fetchError as any)?.message === 'Supabase timeout' || fetchError) {
+        console.warn('⚠️ Kreiranje fallback profila zbog greške...')
+        const fallbackProfile: Profile = {
+          id: userId,
+          email: '',
+          full_name: 'Korisnik',
+          company_name: undefined,
+          industry: undefined,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          onboarding_completed: true, // Postaviti na true da chat radi
+          is_admin: false,
+        }
+        setProfile(fallbackProfile)
+        console.log('✅ Fallback profil postavljen')
+      }
+    }
+  }
+
+  const fetchUserBrain = async (userId: string) => {
+    console.log('🧠 fetchUserBrain pozvan za user ID:', userId)
     
     const { data, error } = await supabase
-      .from('profiles')
+      .from('user_brain')
       .select('*')
-      .eq('id', userId)
+      .eq('user_id', userId)
       .single()
 
     if (error && error.code !== 'PGRST116') {
-      console.error('❌ Greška pri učitavanju profila:', error)
+      console.error('❌ Greška pri učitavanju user_brain:', error)
       return
     }
-    
-    console.log('📥 Profile podaci iz baze:', data)
-    console.log('🎯 onboarding_completed:', data?.onboarding_completed)
-    
-    setProfile(data)
-    console.log('✅ Profile state ažuriran')
+
+    if (error && error.code === 'PGRST116') {
+      console.warn('ℹ️ user_brain ne postoji – kreiram inicijalni red...')
+      const { error: insertBrainError } = await supabase
+        .from('user_brain')
+        .insert({ user_id: userId })
+      if (insertBrainError) {
+        console.error('❌ Greška pri kreiranju user_brain:', insertBrainError)
+      }
+      setUserBrain({ user_id: userId })
+      console.log('✅ Kreiran i postavljen inicijalni user_brain')
+    } else {
+      console.log('🧠 UserBrain podaci iz baze:', data)
+      setUserBrain(data)
+      console.log('✅ UserBrain state ažuriran')
+    }
   }
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -173,8 +287,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      console.log('🔐 signIn start', { email })
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      console.log('🔐 signIn response', { data, error })
       if (error) return { error: error.message }
+      // Ako ima session, odmah povuci profil (ne čekamo onAuthStateChange)
+      if (data?.user?.id) {
+        await fetchProfile(data.user.id)
+      }
       return {}
     } catch (err: any) {
       return { error: err.message }
@@ -312,7 +432,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
-  const value: AuthContextType = { user, profile, loading, signUp, signIn, signInWithGoogle, signOut, updateProfile, saveUserBrain }
+  const value: AuthContextType = { user, profile, userBrain, loading, signUp, signIn, signInWithGoogle, signOut, updateProfile, saveUserBrain, fetchUserBrain }
 
   return (
     <AuthContext.Provider value={value}>

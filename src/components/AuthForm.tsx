@@ -26,6 +26,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
     setError('')
 
     try {
+      console.log('📨 handleSubmit start', { mode, email: formData.email })
       let result
       if (mode === 'signup') {
         result = await signUp(formData.email, formData.password, formData.fullName)
@@ -34,11 +35,14 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
       }
 
       if ((result as any)?.error) {
+        console.log('❌ Auth error', (result as any).error)
         setError((result as any).error)
       } else {
+        console.log('✅ Auth success')
         onSuccess()
       }
     } catch (error: any) {
+      console.error('❌ handleSubmit exception', error)
       setError(error.message)
     } finally {
       setLoading(false)

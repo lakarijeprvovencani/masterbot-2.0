@@ -40,13 +40,13 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // 2. ONBOARDING CHECK - ako tražimo završen onboarding
-  if (requireOnboarding && user && !profile?.onboarding_completed) {
+  if (requireOnboarding && user && profile && !profile.onboarding_completed) {
     console.log('📋 Korisnik nije završio onboarding, preusmeravam na onboarding')
     return <Navigate to="/onboarding" replace state={{ from: location }} />
   }
 
   // 3. ONBOARDING ACCESS - ako je onboarding završen, ne može na onboarding ekrane
-  if (user && profile?.onboarding_completed && (
+  if (user && profile && profile.onboarding_completed && (
     location.pathname === '/onboarding' || 
     location.pathname === '/ai-analysis' || 
     location.pathname === '/analysis-editor'

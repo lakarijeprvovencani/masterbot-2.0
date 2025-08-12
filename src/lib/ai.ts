@@ -40,7 +40,7 @@ export async function processOnboardingAnalysis(userId: string, setStage: (stage
       // Skini sajt preko backend-a (rešava CORS problem)
       console.log(`🌐 Skidam sajt preko backend-a: ${normalizedUrl}`)
       
-      const backendResponse = await fetch('http://localhost:3001/api/scrape-website', {
+      const backendResponse = await fetch('http://localhost:4001/api/scrape-website', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
