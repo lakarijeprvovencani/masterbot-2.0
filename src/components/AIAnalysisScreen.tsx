@@ -48,13 +48,8 @@ export const AIAnalysisScreen: React.FC = () => {
           console.log('✅ AI analiza uspešno sačuvana u bazu')
         }
         
-        // Označi onboarding završen ODMAH nakon što se AI analiza završi
-        const prof = await updateProfile({ onboarding_completed: true })
-        if (prof.error) {
-          console.error('❌ Greška pri ažuriranju profila:', prof.error)
-        } else {
-          console.log('✅ Onboarding označen kao završen - korisnik može pristupiti dashboard-u')
-        }
+        // AI analiza završena, ali onboarding nije još završen
+        console.log('✅ AI analiza završena, prelazim na editor')
         
         // Pređi na editor nakon 2 sekunde
         setTimeout(() => {

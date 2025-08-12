@@ -45,8 +45,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/onboarding" replace state={{ from: location }} />
   }
 
-  // 3. DASHBOARD ACCESS - ako je onboarding završen, može na dashboard
-  if (user && profile?.onboarding_completed && location.pathname === '/onboarding') {
+  // 3. ONBOARDING ACCESS - ako je onboarding završen, ne može na onboarding ekrane
+  if (user && profile?.onboarding_completed && (
+    location.pathname === '/onboarding' || 
+    location.pathname === '/ai-analysis' || 
+    location.pathname === '/analysis-editor'
+  )) {
     console.log('✅ Korisnik je završio onboarding, preusmeravam na dashboard')
     return <Navigate to="/dashboard" replace />
   }

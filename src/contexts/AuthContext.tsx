@@ -102,6 +102,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [])
 
   const fetchProfile = async (userId: string) => {
+    console.log('🔄 fetchProfile pozvan za user ID:', userId)
+    
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -109,10 +111,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       .single()
 
     if (error && error.code !== 'PGRST116') {
-      console.error('Greška pri učitavanju profila:', error)
+      console.error('❌ Greška pri učitavanju profila:', error)
       return
     }
+    
+    console.log('📥 Profile podaci iz baze:', data)
+    console.log('🎯 onboarding_completed:', data?.onboarding_completed)
+    
     setProfile(data)
+    console.log('✅ Profile state ažuriran')
   }
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -221,13 +228,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return { error: 'Nema prijavljenog korisnika' }
+    
+    console.log('🔄 updateProfile pozvan sa:', updates)
+    console.log('👤 Korisnik ID:', user.id)
+    
     const { error } = await supabase
       .from('profiles')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', user.id)
 
-    if (error) return { error: error.message }
+    if (error) {
+      console.error('❌ Greška pri updateProfile:', error)
+      return { error: error.message }
+    }
+    
+    console.log('✅ Profile uspešno ažuriran u bazi')
+    console.log('🔄 Pozivam fetchProfile...')
+    
     await fetchProfile(user.id)
+    
+    console.log('✅ fetchProfile završen')
     return {}
   }
 

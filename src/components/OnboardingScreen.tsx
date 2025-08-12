@@ -22,6 +22,7 @@ export const OnboardingScreen: React.FC = () => {
   const [analysisStage, setAnalysisStage] = useState<string>('')
   const [showEditor, setShowEditor] = useState(false)
   const [analysisText, setAnalysisText] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const navigate = useNavigate()
 
   // Ako nema korisnika, obavezno vrati na početnu (štiti od direktnog / refresh ulaska)
@@ -35,6 +36,11 @@ export const OnboardingScreen: React.FC = () => {
   const [step, setStep] = useState<number>(1)
   const totalSteps = 4
   const progressPct = Math.round((step / totalSteps) * 100)
+  
+  // Debug logging za step
+  useEffect(() => {
+    console.log('🔍 Step state promenjen na:', step)
+  }, [step])
 
   const handleLogout = async () => {
     try {
@@ -229,7 +235,7 @@ export const OnboardingScreen: React.FC = () => {
                     return
                   }
                   // Označi onboarding završen i pređi dalje
-                  const prof = await updateProfile({ ...formData, onboarding_completed: true })
+                  const prof = await updateProfile({ ...formData })
                   if (prof.error) {
                     console.error('❌ Greška pri ažuriranju profila:', prof.error)
                     return
@@ -302,6 +308,14 @@ export const OnboardingScreen: React.FC = () => {
               noValidate
               onSubmit={async (e) => {
                 e.preventDefault()
+                
+                // Zaštita od duplog submit-a
+                if (isSubmitting) {
+                  console.log('⚠️ Forma se već submit-uje, preskačem...')
+                  return
+                }
+                
+                setIsSubmitting(true)
                 console.log('🚀 Step 1 submit - početak...')
                 console.log('📋 Form data pre validacije:', formData)
                 console.log('🔍 Validacija:', { 
@@ -311,28 +325,44 @@ export const OnboardingScreen: React.FC = () => {
                   industry_value: formData.industry
                 })
                 
-                if (!formData.company_name || !formData.industry) {
-                  console.log('❌ Validacija neuspešna - vraćam')
-                  return
+                try {
+                  if (!formData.company_name || !formData.industry) {
+                    console.log('❌ Validacija neuspešna - vraćam')
+                    return
+                  }
+                  
+                  console.log('✅ Validacija uspešna - nastavljam')
+                  console.log('💾 Čuvam brain (step1)...', { formData, user_id: user?.id })
+                  
+                  const result = await saveUserBrain({ company_name: formData.company_name, industry: formData.industry })
+                  
+                  if (result.error) {
+                    console.error('❌ Greška pri čuvanju brain (step1):', result.error)
+                    return
+                  } else {
+                    console.log('✅ Brain uspešno sačuvan (step1)')
+                  }
+                  
+                  console.log('🔄 Pre step promene - trenutni step:', step)
+                  const newStep = Math.min(totalSteps, step + 1)
+                  console.log('🔄 Postavljam novi step:', newStep)
+                  
+                  // Dodajem console.log pre setStep-a
+                  console.log('🔄 Pozivam setStep sa:', newStep)
+                  setStep(newStep)
+                  
+                  // Dodajem console.log nakon setStep-a
+                  console.log('🔄 setStep pozvan, trenutni step je sada:', step)
+                  
+                  // Dodajem delay da vidim da li se step stvarno menja
+                  setTimeout(() => {
+                    console.log('🔄 Step nakon 100ms:', step)
+                    console.log('🔄 Da li se step promenio?', step === newStep ? 'DA' : 'NE')
+                  }, 100)
+                  
+                } finally {
+                  setIsSubmitting(false)
                 }
-                
-                console.log('✅ Validacija uspešna - nastavljam')
-                console.log('💾 Čuvam brain (step1)...', { formData, user_id: user?.id })
-                
-                const result = await saveUserBrain({ company_name: formData.company_name, industry: formData.industry })
-                
-                if (result.error) {
-                  console.error('❌ Greška pri čuvanju brain (step1):', result.error)
-                  return
-                } else {
-                  console.log('✅ Brain uspešno sačuvan (step1)')
-                }
-                
-                console.log('🔄 Pre step promene - trenutni step:', step)
-                const newStep = Math.min(totalSteps, step + 1)
-                console.log('🔄 Postavljam novi step:', newStep)
-                setStep(newStep)
-                console.log('🔄 Step promenjen na:', newStep)
               }}
               className="space-y-6"
             >
@@ -457,16 +487,35 @@ export const OnboardingScreen: React.FC = () => {
                 }
                 
                 console.log('🌐 Sačuvavam website:', website)
-                const result = await saveUserBrain({ website })
-                if (result?.error) {
-                  console.error('❌ Greška pri čuvanju brain (step3):', result.error)
-                } else {
-                  console.log('✅ Brain uspešno sačuvan (step3)')
+                console.log('🔄 Pozivam saveUserBrain sa:', { website })
+                
+                try {
+                  const result = await saveUserBrain({ website })
+                  console.log('🔄 saveUserBrain rezultat:', result)
+                  
+                  if (result?.error) {
+                    console.error('❌ Greška pri čuvanju brain (step3):', result.error)
+                    return // Ne nastavljaj ako ima greške
+                  } else {
+                    console.log('✅ Brain uspešno sačuvan (step3)')
+                  }
+                } catch (error) {
+                  console.error('❌ Exception pri saveUserBrain (step3):', error)
+                  return // Ne nastavljaj ako ima exception
                 }
                 
                 console.log('🔄 Prelazim na sledeći korak...')
+                console.log('🔄 Pre step promene - trenutni step:', step)
+                const newStep = Math.min(totalSteps, step + 1)
+                console.log('🔄 Postavljam novi step:', newStep)
                 setStep(s => Math.min(totalSteps, s + 1))
-                console.log('✅ Korak promenjen!')
+                console.log('🔄 setStep pozvan, trenutni step je sada:', step)
+                
+                // Dodajem delay da vidim da li se step stvarno menja
+                setTimeout(() => {
+                  console.log('🔄 Step nakon 100ms:', step)
+                  console.log('🔄 Da li se step promenio?', step === newStep ? 'DA' : 'NE')
+                }, 100)
               }}
               className="space-y-6"
             >
@@ -492,7 +541,12 @@ export const OnboardingScreen: React.FC = () => {
                 <div className="flex items-center space-x-3">
                   <button
                     type="button"
-                    onClick={() => { nextStep() }}
+                    onClick={() => { 
+                      console.log('🔄 Preskačem step 3...')
+                      console.log('🔄 Pre nextStep - trenutni step:', step)
+                      nextStep()
+                      console.log('🔄 nextStep pozvan, trenutni step je sada:', step)
+                    }}
                     className="text-white/80 hover:text-white underline"
                   >
                     Preskoči

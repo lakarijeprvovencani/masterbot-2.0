@@ -160,7 +160,7 @@ Ovo su informacije koje smo do sada prikupili o vašem ecommerce biznisu. One ć
     console.log('─'.repeat(50))
     
     // Učitaj API ključ iz environment-a
-    const apiKey = process.env.OPENAI_API_KEY || 'YOUR_API_KEY_HERE'
+    const apiKey = process.env.VITE_OPENAI_API_KEY || 'YOUR_API_KEY_HERE'
     
     console.log('🔑 API ključ: ' + apiKey.substring(0, 20) + '...')
     
