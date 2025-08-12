@@ -12,6 +12,8 @@ import WebsiteSEOScreen from './components/WebsiteSEOScreen'
 import AIChat from './components/AIChat'
 import Sidebar from './components/Sidebar'
 import BusinessProfileScreen from './components/BusinessProfileScreen'
+import WelcomeMascot from './components/WelcomeMascot' // Importuj novu komponentu
+import OnboardingPointer from './components/OnboardingPointer' // Importuj novu komponentu
 import { ChatProvider } from './contexts/ChatContext'
 import { 
   ProtectedRoute, 
@@ -66,35 +68,118 @@ const AuthPage: React.FC = () => {
 }
 
 const Dashboard: React.FC = () => {
+  const { profile } = useAuth();
+  const firstName = profile?.full_name?.split(' ')[0] || 'Korisnik';
+  
+  const [tourStep, setTourStep] = useState(localStorage.getItem('onboardingTourCompleted') ? 0 : 1);
+  const [isChatOpenForTour, setIsChatOpenForTour] = useState(false);
+
+  const startTour = () => setTourStep(2);
+  const nextTourStep = () => setTourStep(prev => prev + 1);
+  const endTour = () => {
+    setTourStep(4); // Završni korak sa maskotom
+    setTimeout(() => {
+      setTourStep(0);
+      localStorage.setItem('onboardingTourCompleted', 'true');
+    }, 4000); // Maskota ostaje 4 sekunde
+  };
+  const skipTour = () => {
+    setTourStep(0);
+    localStorage.setItem('onboardingTourCompleted', 'true');
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#040A3E]/90 to-[#040A3E]/80">
-      <Sidebar />
-      <div className="pl-20 md:pl-72 py-6 md:py-10 pr-4 md:pr-10 text-white">
-        <div className="max-w-6xl mx-auto px-2 md:px-0">
-          <div className="text-center">
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">🎯 Masterbot AI Dashboard</h1>
-            <p className="text-white/70 mb-10">Dobrodošli u vašu AI marketing platformu!</p>
-          </div>
-          <div className="mt-4 md:mt-6 mb-10">
-            <AIChat />
+    <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#0D1240] to-[#040A3E]">
+      {tourStep >= 1 && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-fade-in"></div>}
+      
+      <div className={tourStep >= 2 && tourStep < 4 ? 'relative z-50' : ''}>
+        <Sidebar />
+      </div>
+
+      <div className="pl-20 md:pl-72 py-10 pr-4 md:pr-10 text-white font-sans">
+        <div className="max-w-4xl mx-auto">
+          <header className="text-center mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent mb-2 animate-fade-in-down">
+              Masterbot AI Dashboard
+            </h1>
+            <p className="text-white/60 text-lg animate-fade-in-down" style={{ animationDelay: '0.2s' }}>
+              Dobrodošli u vašu AI marketing platformu!
+            </p>
+          </header>
+          <div className={`animate-fade-in-up ${tourStep >= 2 ? 'relative z-50' : ''}`} style={{ animationDelay: '0.4s' }}>
+            <AIChat 
+              isControlled={tourStep > 1} 
+              controlledIsOpen={isChatOpenForTour} 
+              onToggle={() => {
+                if(tourStep === 2) {
+                  setIsChatOpenForTour(true);
+                  nextTourStep();
+                }
+              }} 
+            />
           </div>
         </div>
       </div>
+      
+      {tourStep === 1 && <WelcomeMascot firstName={firstName} onStartTour={startTour} mode="welcome" />}
+
+      {tourStep === 2 && (
+        <OnboardingPointer
+          text="Ovde otvaraš i zatvaraš AI chat. Hajde, klikni da ga otvoriš!"
+          onNext={() => { setIsChatOpenForTour(true); nextTourStep(); }}
+          onDismiss={skipTour}
+          position={{ top: 'calc(50% - 150px)', left: 'calc(50% + 230px)' }}
+          arrowPosition="left"
+        />
+      )}
+
+      {tourStep === 3 && (
+        <OnboardingPointer
+          text="Odlično! Ovde možeš da me pitaš bilo šta. Probaj da ukucaš 'Kako da unapredim svoj marketing?'"
+          onNext={endTour}
+          onDismiss={skipTour}
+          nextButtonText="Završi vodič"
+          position={{ bottom: '180px', left: 'calc(50% - 150px)' }}
+          arrowPosition="bottom"
+        />
+      )}
+
+      {tourStep === 4 && <WelcomeMascot firstName={firstName} mode="goodbye" />}
     </div>
   )
 }
 
-const SettingsScreen: React.FC = () => (
-  <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#040A3E]/90 to-[#040A3E]/80">
-    <Sidebar />
-    <div className="pl-20 md:pl-72 py-6 md:py-10 pr-4 md:pr-10 text-white">
-      <div className="max-w-6xl mx-auto px-2 md:px-0">
-        <h1 className="text-3xl md:text-4xl font-bold mb-2">Podesavanja</h1>
-        <p className="text-white/70">Ovde ćemo dodati opcije uskoro.</p>
+const SettingsScreen: React.FC = () => {
+  const handleResetMascot = () => {
+    localStorage.removeItem('onboardingTourCompleted');
+    alert('Vodič dobrodošlice će se ponovo pojaviti pri sledećoj poseti dashboardu.');
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#0D1240] to-[#040A3E]">
+      <Sidebar />
+      <div className="pl-20 md:pl-72 py-10 pr-4 md:pr-10 text-white font-sans">
+        <div className="max-w-4xl mx-auto">
+          <header className="mb-10">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Podešavanja</h1>
+            <p className="text-white/50 mt-1">Upravljajte vašim nalogom i podešavanjima aplikacije.</p>
+          </header>
+          
+          <div className="bg-[#0D1240]/60 border border-white/10 rounded-2xl p-6">
+            <h2 className="text-xl font-semibold mb-4">Pomoćnik Dobrodošlice</h2>
+            <p className="text-white/70 mb-4">Ako želite da ponovo vidite poruku dobrodošlice od našeg AI pomoćnika, kliknite na dugme ispod.</p>
+            <button 
+              onClick={handleResetMascot}
+              className="px-5 py-2 rounded-lg bg-gradient-to-r from-[#F56E36]/80 to-[#d15a2c]/80 text-white font-semibold hover:opacity-90 transition-opacity duration-300"
+            >
+              Prikaži Vodič Ponovo
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-)
+  );
+};
 
 const AppContent: React.FC = () => {
   return (

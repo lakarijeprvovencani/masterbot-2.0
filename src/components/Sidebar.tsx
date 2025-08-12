@@ -2,111 +2,91 @@ import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import logoSrc from '../assets/images/logobotprovidan.png'
 
-const Icon: React.FC<{ name: 'home' | 'book' | 'settings'; className?: string }> = ({ name, className }) => {
-  const common = 'w-5 h-5';
-  switch (name) {
-    case 'home':
-      return (
-        <svg className={`${common} ${className || ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 10.5L12 3l9 7.5" />
-          <path d="M5.5 9.5V20a1 1 0 0 0 1 1H17.5a1 1 0 0 0 1-1V9.5" />
-        </svg>
-      )
-    case 'book':
-      return (
-        <svg className={`${common} ${className || ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v16H6.5A2.5 2.5 0 0 0 4 21.5V5.5Z" />
-          <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19" />
-        </svg>
-      )
-    case 'settings':
-      return (
-        <svg className={`${common} ${className || ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-          <path d="M19.4 15a1.2 1.2 0 0 0 .24 1.32l.03.03a1.5 1.5 0 0 1-2.12 2.12l-.03-.03a1.2 1.2 0 0 0-1.32-.24 1.2 1.2 0 0 0-.73 1.1V20a1.5 1.5 0 0 1-3 0v-.03a1.2 1.2 0 0 0-.73-1.1 1.2 1.2 0 0 0-1.32.24l-.03.03a1.5 1.5 0 0 1-2.12-2.12l.03-.03a1.2 1.2 0 0 0 .24-1.32 1.2 1.2 0 0 0-1.1-.73H4a1.5 1.5 0 0 1 0-3h.03a1.2 1.2 0 0 0 1.1-.73 1.2 1.2 0 0 0-.24-1.32l-.03-.03a1.5 1.5 0 1 1 2.12-2.12l.03.03a1.2 1.2 0 0 0 1.32.24h0A1.2 1.2 0 0 0 9.5 6.5V6a1.5 1.5 0 0 1 3 0v.03a1.2 1.2 0 0 0 .73 1.1 1.2 1.2 0 0 0 1.32-.24l.03-.03a1.5 1.5 0 0 1 2.12 2.12l-.03.03a1.2 1.2 0 0 0-.24 1.32v0c.17.46.61.77 1.1.77H20a1.5 1.5 0 0 1 0 3h-.03c-.5 0-.93.31-1.1.77Z" />
-        </svg>
-      )
-  }
-}
-
 const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: 'home' as const },
   { label: 'Biznis profil', path: '/business-profile', icon: 'book' as const },
 ]
 
+const Icon: React.FC<{ name: 'home' | 'book' | 'settings' | 'toggle'; className?: string, open?: boolean }> = ({ name, className, open }) => {
+  const common = 'w-6 h-6';
+  switch (name) {
+    case 'home':
+      return <svg className={common} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+    case 'book':
+      return <svg className={common} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+    case 'settings':
+      return <svg className={common} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+    case 'toggle':
+      return <svg className={`w-6 h-6 transition-transform duration-300 ${open ? '' : 'transform rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+  }
+}
+
 const Sidebar: React.FC = () => {
   const [open, setOpen] = useState(false)
   const location = useLocation()
 
-  const iconWrap = (active: boolean) =>
-    `w-10 h-10 flex items-center justify-center rounded-full border ${
-      active ? 'bg-[#F56E36]/30 border-[#F56E36]/50 text-white' : 'bg-white/10 border-white/15 text-white/80 hover:bg-white/15'
-    }`
-
   return (
-    <div className={`fixed left-0 top-0 h-screen z-30 transition-all duration-300 ${open ? 'w-64' : 'w-16'}`}>
-      <div className="h-full bg-gradient-to-b from-white/10 via-white/5 to-white/10 backdrop-blur-xl border-r border-white/20 shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className={`flex items-center ${open ? 'justify-between' : 'justify-end'} px-3 py-3 border-b border-white/10`}>
-          {open && (
-            <div className="flex items-center space-x-2">
-              <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
-                <img src={logoSrc} alt="Masterbot" className="w-6 h-6 object-contain" />
+    <aside className={`fixed left-0 top-0 h-screen z-30 transition-all duration-300 ease-in-out ${open ? 'w-64' : 'w-20'}`}>
+      <div className="h-full bg-gradient-to-b from-[#0D1240] to-[#040A3E] border-r border-white/10 shadow-2xl flex flex-col justify-between">
+        <div>
+          {/* Header */}
+          <div className={`flex items-center p-4 border-b border-white/10 ${open ? 'justify-between' : 'justify-center'}`}>
+            {open && (
+              <div className="flex items-center space-x-3">
+                <img src={logoSrc} alt="Masterbot" className="w-9 h-9" />
+                <span className="text-white font-bold text-lg">Masterbot</span>
               </div>
-              <span className="text-white font-semibold">Masterbot</span>
-            </div>
-          )}
-          <button
-            aria-label="Toggle sidebar"
-            onClick={() => setOpen(v => !v)}
-            className="w-8 h-8 rounded-xl border border-white/20 text-white/70 hover:text-white hover:bg-white/10"
-            title={open ? 'Sakrij' : 'Prikaži'}
-          >
-            {open ? '⟨' : '⟩'}
-          </button>
+            )}
+            <button
+              onClick={() => setOpen(v => !v)}
+              className="w-10 h-10 rounded-full text-white/70 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
+              title={open ? 'Sakrij' : 'Prikaži'}
+            >
+              <Icon name="toggle" open={open} />
+            </button>
+          </div>
+
+          {/* Nav */}
+          <nav className="mt-6 space-y-2">
+            {navItems.map(item => {
+              const active = location.pathname === item.path
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  title={open ? '' : item.label}
+                  className={`flex items-center py-3 mx-3 rounded-lg transition-all duration-200 group ${
+                    active
+                      ? 'bg-gradient-to-r from-[#F56E36]/20 to-transparent text-white shadow-inner'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <div className={`absolute left-0 w-1 h-6 bg-[#F56E36] rounded-r-full transition-opacity duration-300 ${active ? 'opacity-100' : 'opacity-0'}`}></div>
+                  <div className={`px-3 transition-all duration-300 ${active ? 'text-[#F56E36]' : ''}`}>
+                    <Icon name={item.icon} />
+                  </div>
+                  <span className={`transition-opacity duration-200 whitespace-nowrap ${open ? 'opacity-100' : 'opacity-0'}`}>{item.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 py-4 space-y-2 overflow-y-auto">
-          {navItems.map(item => {
-            const active = location.pathname === item.path
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                title={item.label}
-                aria-label={item.label}
-                className={`mx-2 flex items-center rounded-xl px-2 py-2 text-sm transition-colors ${
-                  active
-                    ? 'text-white'
-                    : 'text-white/70 hover:text-white'
-                }`}
-              >
-                <div className={iconWrap(active)}>
-                  <Icon name={item.icon} />
-                </div>
-                <span className={`truncate ml-2 ${open ? 'block' : 'hidden'}`}>{item.label}</span>
-              </Link>
-            )
-          })}
-        </nav>
-
-        {/* Footer - Settings */}
-        <div className="p-2 border-t border-white/10">
+        {/* Footer */}
+        <div className="p-3 border-t border-white/10">
           <Link
             to="/settings"
-            title="Podesavanja"
-            className={`mx-2 flex items-center ${open ? 'justify-start' : 'justify-center'} rounded-xl px-2 py-2 text-sm text-white/70 hover:text-white`}
+            title={open ? '' : "Podesavanja"}
+            className="flex items-center py-3 mx-3 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-colors group"
           >
-            <div className={iconWrap(location.pathname === '/settings')}>
+            <div className={`px-3 ${location.pathname === '/settings' ? 'text-[#F56E36]' : ''}`}>
               <Icon name="settings" />
             </div>
-            <span className={`ml-2 ${open ? 'block' : 'hidden'}`}>Podesavanja</span>
+            <span className={`transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0'}`}>Podesavanja</span>
           </Link>
-          <div className="text-center text-[11px] text-white/40 mt-2">v1.0</div>
         </div>
       </div>
-    </div>
+    </aside>
   )
 }
 
