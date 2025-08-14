@@ -10,6 +10,8 @@ const puppeteer = require('puppeteer');
 const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 const fetch = require('node-fetch');
+const multer = require('multer');
+const FormData = require('form-data');
 
 const app = express();
 const port = process.env.PORT || 4001;
@@ -21,6 +23,7 @@ const port = process.env.PORT || 4001;
 app.use(cors())
 app.use(express.json())
 app.use(express.static('dist'));
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Website Scraper endpoint
 app.post('/api/scrape-website', async (req, res) => {
@@ -153,6 +156,48 @@ app.get('/api/proxy-image', async (req, res) => {
   } catch (error) {
     console.error('Error proxying image:', error);
     res.status(500).send('Failed to proxy image');
+  }
+});
+
+// Ideogram: Replace background (može i "transparent background" za skidanje pozadine)
+app.post('/api/ideogram/replace-background', upload.single('image'), async (req, res) => {
+  try {
+    const apiKey = process.env.VITE_IDEOGRAM_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Ideogram API key not configured on the server.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file is required (field name: image)' });
+    }
+    const prompt = req.body.prompt || 'transparent background, remove background';
+
+    const form = new FormData();
+    form.append('image', req.file.buffer, { filename: req.file.originalname || 'upload.png', contentType: req.file.mimetype || 'image/png' });
+    form.append('prompt', prompt);
+
+    const resp = await fetch('https://api.ideogram.ai/v1/ideogram-v3/replace-background', {
+      method: 'POST',
+      headers: {
+        'Api-Key': apiKey,
+        ...form.getHeaders(),
+      },
+      body: form,
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text();
+      console.error('Ideogram replace-background error:', resp.status, body);
+      return res.status(resp.status).send(body);
+    }
+    const data = await resp.json();
+    const url = data?.data?.[0]?.url;
+    if (!url) {
+      return res.status(500).json({ error: 'No URL returned from Ideogram' });
+    }
+    res.json({ url });
+  } catch (err) {
+    console.error('Server error replace-background:', err);
+    res.status(500).json({ error: 'Failed to process replace-background' });
   }
 });
 
