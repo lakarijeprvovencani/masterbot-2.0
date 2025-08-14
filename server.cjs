@@ -14,6 +14,8 @@ const multer = require('multer');
 const FormData = require('form-data');
 
 const app = express();
+const fs = require('fs');
+const path = require('path');
 const port = process.env.PORT || 4001;
 
 // Node.js 18+ ima built-in fetch
@@ -23,6 +25,11 @@ const port = process.env.PORT || 4001;
 app.use(cors())
 app.use(express.json())
 app.use(express.static('dist'));
+app.use(express.static('public'));
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Website Scraper endpoint
@@ -159,6 +166,27 @@ app.get('/api/proxy-image', async (req, res) => {
   }
 });
 
+// Save external image URL to local uploads and return persistent URL
+app.post('/api/save-image-by-url', async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url) return res.status(400).json({ error: 'url is required' });
+    const r = await fetch(url);
+    if (!r.ok) return res.status(500).json({ error: 'failed to fetch remote image' });
+    const contentType = r.headers.get('content-type') || 'image/png';
+    const ext = contentType.includes('jpeg') ? 'jpg' : contentType.includes('png') ? 'png' : 'png';
+    const arrayBuffer = await r.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const fileName = `img_${Date.now()}.${ext}`;
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    return res.json({ savedUrl: `/uploads/${fileName}` });
+  } catch (e) {
+    console.error('save-image-by-url error:', e);
+    res.status(500).json({ error: 'failed to save image' });
+  }
+});
+
 // Ideogram: Replace background (može i "transparent background" za skidanje pozadine)
 app.post('/api/ideogram/replace-background', upload.single('image'), async (req, res) => {
   try {
@@ -170,6 +198,7 @@ app.post('/api/ideogram/replace-background', upload.single('image'), async (req,
       return res.status(400).json({ error: 'Image file is required (field name: image)' });
     }
     const prompt = req.body.prompt || 'transparent background, remove background';
+    const save = req.body.save === 'true' || req.body.save === true;
 
     const form = new FormData();
     form.append('image', req.file.buffer, { filename: req.file.originalname || 'upload.png', contentType: req.file.mimetype || 'image/png' });
@@ -194,7 +223,20 @@ app.post('/api/ideogram/replace-background', upload.single('image'), async (req,
     if (!url) {
       return res.status(500).json({ error: 'No URL returned from Ideogram' });
     }
-    res.json({ url });
+    if (!save) {
+      return res.json({ url });
+    }
+    // Save to local uploads
+    const r = await fetch(url);
+    if (!r.ok) return res.status(500).json({ error: 'Failed to fetch ideogram image for saving' });
+    const contentType = r.headers.get('content-type') || 'image/png';
+    const ext = contentType.includes('jpeg') ? 'jpg' : contentType.includes('png') ? 'png' : 'png';
+    const arrayBuffer = await r.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const fileName = `rb_${Date.now()}.${ext}`;
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    return res.json({ url, savedUrl: `/uploads/${fileName}` });
   } catch (err) {
     console.error('Server error replace-background:', err);
     res.status(500).json({ error: 'Failed to process replace-background' });
