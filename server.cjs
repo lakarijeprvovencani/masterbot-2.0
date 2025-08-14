@@ -30,6 +30,7 @@ const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+app.use('/api/uploads', express.static(uploadsDir));
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Website Scraper endpoint
@@ -180,7 +181,7 @@ app.post('/api/save-image-by-url', async (req, res) => {
     const fileName = `img_${Date.now()}.${ext}`;
     const filePath = path.join(uploadsDir, fileName);
     fs.writeFileSync(filePath, buffer);
-    return res.json({ savedUrl: `/uploads/${fileName}` });
+    return res.json({ savedUrl: `/api/uploads/${fileName}` });
   } catch (e) {
     console.error('save-image-by-url error:', e);
     res.status(500).json({ error: 'failed to save image' });
@@ -236,7 +237,7 @@ app.post('/api/ideogram/replace-background', upload.single('image'), async (req,
     const fileName = `rb_${Date.now()}.${ext}`;
     const filePath = path.join(uploadsDir, fileName);
     fs.writeFileSync(filePath, buffer);
-    return res.json({ url, savedUrl: `/uploads/${fileName}` });
+    return res.json({ url, savedUrl: `/api/uploads/${fileName}` });
   } catch (err) {
     console.error('Server error replace-background:', err);
     res.status(500).json({ error: 'Failed to process replace-background' });
