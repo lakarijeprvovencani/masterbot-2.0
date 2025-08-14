@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import ImageEditor from './ImageEditor';
 
 export interface SocialPost {
   title: string;
@@ -16,20 +17,58 @@ interface SocialPostPanelProps {
 }
 
 const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
-  
+  const [isEditing, setIsEditing] = useState(false);
+
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     // You can add a toast notification for better UX
   };
 
-  const handleDownload = () => {
-    const link = document.createElement('a');
-    link.href = post.imageUrl;
-    link.download = `${post.title.replace(/\s+/g, '_').toLowerCase()}_${post.size}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(`/api/proxy-image?url=${encodeURIComponent(post.imageUrl)}`);
+      if (!response.ok) {
+        throw new Error('Failed to proxy image for download');
+      }
+      const { imageSrc } = await response.json();
+      
+      const blobResponse = await fetch(imageSrc);
+      const blob = await blobResponse.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${post.title.replace(/\s+/g, '_').toLowerCase()}_${post.size}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to download image:", error);
+    }
   };
+
+  const handlePublish = async () => {
+    // Placeholder za buduću direktnu objavu na mreže
+    // Ovde ćemo kasnije dodati integracije (Meta API, TikTok, X...)
+    alert('Objavljivanje će uskoro biti dostupno direktno iz aplikacije.');
+  };
+
+  if (isEditing) {
+    return (
+      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-lg animate-fade-in-up">
+        <div className="bg-editor-gradient p-6 pt-14 pr-14 rounded-2xl shadow-2xl relative w-11/12 h-5/6">
+           <button onClick={() => setIsEditing(false)} className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 z-10 hover:bg-black/80 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+          <ImageEditor
+            imageUrl={post.imageUrl}
+            contextText={`Naslov: ${post.title}\nCaption: ${post.caption}\nHashtags: ${post.hashtags.join(' ')}\nCTA: ${post.cta}`}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-editor-gradient border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col h-full max-h-[90vh] animate-fade-in-up">
@@ -40,47 +79,69 @@ const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 flex-grow overflow-hidden">
-        {/* Left: Image Preview */}
-        <div className="flex flex-col items-center justify-center bg-black/20 rounded-lg p-4">
-          <img src={post.imageUrl} alt={post.title} className="max-w-full max-h-full object-contain rounded-md" />
-          <button
-            onClick={handleDownload}
-            className="mt-4 px-4 py-2 bg-gradient-to-r from-[#F56E36] to-[#d15a2c] text-white font-semibold rounded-lg text-sm hover:opacity-90 transition-opacity"
-          >
-            Download Image
-          </button>
+      {/* Main content area */}
+      <div className="flex-grow grid grid-cols-2 gap-6 overflow-hidden">
+        {/* Left: Image Preview & Edit Button */}
+        <div className="flex flex-col space-y-4">
+          <div className="relative group flex-grow">
+            <img src={post.imageUrl} alt={post.title} className="w-full h-full object-contain rounded-lg shadow-lg" />
+            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+              <button onClick={() => setIsEditing(true)} className="bg-gradient-to-br from-[#F56E36] to-[#d15a2c] text-white font-bold py-3 px-6 rounded-lg shadow-lg transform hover:scale-105 transition-transform flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                  <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+                </svg>
+                <span>Uredi Sliku</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Right: Content */}
-        <div className="flex flex-col space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-          <div>
-            <label className="text-sm font-medium text-white/80 mb-2 block">Caption</label>
-            <div className="relative">
-              <textarea
-                value={post.caption}
-                readOnly
-                className="w-full h-40 bg-black/20 border border-white/15 rounded-xl p-3 text-white/90 resize-none"
-              />
-              <button onClick={() => handleCopy(post.caption)} className="absolute top-2 right-2 text-white/50 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-              </button>
+        <div className="flex flex-col h-full">
+          <div className="flex-1 flex flex-col space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+            <div>
+              <label className="text-sm font-medium text-white/80 mb-2 block">Caption</label>
+              <div className="relative">
+                <textarea
+                  value={post.caption}
+                  readOnly
+                  className="w-full h-40 bg-black/20 border border-white/15 rounded-xl p-3 text-white/90 resize-none"
+                />
+                <button onClick={() => handleCopy(post.caption)} className="absolute top-2 right-2 text-white/50 hover:text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-white/80 mb-2 block">Hashtags</label>
+              <div className="relative">
+                  <div className="p-3 bg-black/20 border border-white/15 rounded-xl text-white/90">
+                      {post.hashtags.join(' ')}
+                  </div>
+                <button onClick={() => handleCopy(post.hashtags.join(' '))} className="absolute top-2 right-2 text-white/50 hover:text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+              </div>
+            </div>
+             <div>
+              <label className="text-sm font-medium text-white/80 mb-2 block">Call to Action</label>
+              <p className="p-3 bg-black/20 border border-white/15 rounded-xl text-white/90">{post.cta}</p>
             </div>
           </div>
-          <div>
-            <label className="text-sm font-medium text-white/80 mb-2 block">Hashtags</label>
-            <div className="relative">
-                <div className="p-3 bg-black/20 border border-white/15 rounded-xl text-white/90">
-                    {post.hashtags.join(' ')}
-                </div>
-              <button onClick={() => handleCopy(post.hashtags.join(' '))} className="absolute top-2 right-2 text-white/50 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-              </button>
-            </div>
-          </div>
-           <div>
-            <label className="text-sm font-medium text-white/80 mb-2 block">Call to Action</label>
-            <p className="p-3 bg-black/20 border border-white/15 rounded-xl text-white/90">{post.cta}</p>
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={handleDownload}
+              className="w-full px-4 py-2 bg-white/10 hover:bg-white/15 text-white font-semibold rounded-lg text-sm transition-colors border border-white/15"
+            >
+              Preuzmi sliku
+            </button>
+            <button
+              onClick={handlePublish}
+              className="w-full px-4 py-3 bg-gradient-to-r from-[#F56E36] to-[#5a67d8] text-white font-bold rounded-lg text-sm shadow-lg hover:opacity-95 transition-opacity"
+            >
+              Objavi
+            </button>
           </div>
         </div>
       </div>

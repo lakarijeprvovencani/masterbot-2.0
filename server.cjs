@@ -129,6 +129,33 @@ app.post('/api/generate-ideogram-image', async (req, res) => {
   }
 });
 
+app.get('/api/proxy-image', async (req, res) => {
+  console.log('--- Primljen zahtev za proxy slike ---');
+  try {
+    const imageUrl = req.query.url;
+    console.log('URL slike za proxy:', imageUrl);
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      return res.status(400).send('Image URL is required');
+    }
+
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const contentType = response.headers.get('content-type');
+
+    const imageSrc = `data:${contentType};base64,${buffer.toString('base64')}`;
+    
+    res.json({ imageSrc }); // Send as JSON object
+
+  } catch (error) {
+    console.error('Error proxying image:', error);
+    res.status(500).send('Failed to proxy image');
+  }
+});
+
 /**
  * Funkcija za čišćenje HTML-a
  */

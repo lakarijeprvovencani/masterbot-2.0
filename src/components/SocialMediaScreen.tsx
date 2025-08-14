@@ -35,14 +35,46 @@ const SocialMediaScreen: React.FC = () => {
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(scrollToBottom, [messages]);
 
-  const handleImageGeneration = async (prompt: string, size: '1024x1024' | '1024x1792' | '1792x1024' = '1024x1024') => {
+  const systemPrompt = `
+Vi ste Masterbot, AI asistent za društvene mreže. Vaš zadatak je da pomognete korisnicima u kreiranju objava za društvene mreže na srpskom jeziku.
+
+Kada korisnik zatraži da se generiše vizual (slika, baner, post, story), vi treba da generišete i sliku i tekstualni sadržaj.
+
+Vaš odgovor MORA biti u formatu JSON objekta koji sadrži sledeća polja: title, caption, hashtags, cta, notes.
+
+Primer odgovora:
+{
+  "title": "Inspiracija sa plaže",
+  "caption": "Pronađi svoju inspiraciju gde god da se nalaziš. Digitalni nomadizam ti pruža slobodu da radiš sa najlepših mesta na svetu. 💻🌊 #digitalninomad #radodkuce #freelancer",
+  "hashtags": ["#digitalninomad", "#radodkuce", "#freelancer", "#posaoodkuce", "#inspiracija"],
+  "cta": "Saznaj više",
+  "notes": "Slika prikazuje opuštajuću atmosferu i slobodu."
+}
+
+Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
+`;
+
+  // Detekcija formata po korisničkom zahtevu
+  const detectSizeFromText = (text: string): '1024x1024' | '1024x1792' | '1792x1024' => {
+    const t = text.toLowerCase();
+    // Story/Reel/vertical
+    if (/(story|stori|reel|tiktok|vertical|uspravno|9x16|1080x1920)/.test(t)) return '1024x1792';
+    // Wide/banner/cover/hero/horizontal
+    if (/(baner|banner|cover|kaver|hero|wide|landscape|horizontal|16x9|1920x1080)/.test(t)) return '1792x1024';
+    // Default: square post
+    if (/(post|instagram post|kvadrat|square|1x1|1080x1080)/.test(t)) return '1024x1024';
+    return '1024x1024';
+  };
+
+  const handleImageGeneration = async (promptForImage: string, size: '1024x1024' | '1024x1792' | '1792x1024' = '1024x1024', postData: Omit<SocialPost, 'imageUrl' | 'size'>) => {
     try {
-      // Step 1: Call our own server's proxy endpoint
+      // Forsiramo generisanje BEZ TEKSTA na slici
+      const safePrompt = `${promptForImage}. Bez teksta, bez slova, bez natpisa; no text, no letters; čist vizual; ostavi dovoljno negativnog prostora za kasniji tekst.`;
       const response = await fetch('/api/generate-ideogram-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: prompt,
+          prompt: safePrompt,
           aspect_ratio: size === '1024x1792' ? '9x16' : (size === '1792x1024' ? '16x9' : '1x1'),
         }),
       });
@@ -54,51 +86,16 @@ const SocialMediaScreen: React.FC = () => {
       const imageData = await response.json();
       const imageUrl = imageData.images[0].url;
 
-      // Step 2: Generate Text Content
-      const textResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({
-            model: 'gpt-4o',
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are a creative social media assistant. Based on the user's prompt and business profile, generate a complete social media post in Serbian.
-                    Business Profile:
-                    - Name: ${userBrain?.company_name}
-                    - Industry: ${userBrain?.industry}
-                    - Goals: ${userBrain?.goals?.join(', ')}
-
-                    The user requested an image with this prompt: "${prompt}".
-                    
-                    Your task is to provide a JSON object with the following structure, in Serbian:
-                    {
-                      "title": "A short, catchy title for the post (in Serbian)",
-                      "caption": "An engaging caption for the social media post. Provide 2-3 variations separated by '||' (in Serbian).",
-                      "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"],
-                      "cta": "A clear call to action for the post (in Serbian)"
-                    }`
-                }
-            ],
-        })
-      });
-      const textData = await textResponse.json();
-      const postContent = JSON.parse(textData.choices[0].message.content);
-
       setSocialPost({
-        ...postContent,
-        imageUrl,
-        size,
-        notes: `Image generated based on prompt: ${prompt}`,
+        ...postData,
+        imageUrl: imageUrl,
+        size: size,
       });
 
       const newAssistantMessage: Message = {
         id: Date.now().toString() + 'a',
         role: 'assistant',
-        content: 'Vaš vizual i predlozi za objavu su spremni! Možete ih pregledati sa desne strane.'
+        content: 'Vaš vizual (bez teksta) i predlozi za objavu su spremni! Pregledajte ih sa desne strane. Ako želite tekst na slici, kliknite “Uredi Sliku” i dodajte ga kroz editor.'
       };
       setMessages(prev => [...prev, newAssistantMessage]);
 
@@ -116,8 +113,8 @@ const SocialMediaScreen: React.FC = () => {
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
-    const newUserMessage: Message = { id: Date.now().toString(), role: 'user', content: inputMessage };
-    setMessages(prev => [...prev, newUserMessage]);
+    const currentUserMessage: Message = { id: Date.now().toString(), role: 'user', content: inputMessage };
+    setMessages(prev => [...prev, currentUserMessage]);
     setInputMessage('');
     setIsLoading(true);
 
@@ -130,60 +127,59 @@ const SocialMediaScreen: React.FC = () => {
             },
             body: JSON.stringify({
                 model: 'gpt-4o',
+                response_format: { type: "json_object" },
                 messages: [
+                    { role: 'system', content: systemPrompt },
                     {
-                        role: 'system',
-                        content: `You are a social media assistant. Your job is to understand user requests and either respond directly or call tools to generate content.
+                      role: 'user',
+                      content: `
+                        Korisnikov zahtev: "${currentUserMessage.content}"
                         
-                        Available tools:
-                        - generateImage(prompt: string, size: '1024x1024' | '1024x1792' | '1792x1024')
-                        
-                        If the user asks for a visual, banner, post, story, or anything similar, call the generateImage tool. If the user asks for text on the image, instruct the model to leave a clean, designated space for the text, but do not write the text on the image. Always respond in Serbian.
-                        The user's business profile:
-                        - Name: ${userBrain?.company_name}
-                        - Industry: ${userBrain?.industry}`
-                    },
-                    ...messages,
-                    newUserMessage
-                ],
-                tools: [{
-                    type: 'function',
-                    function: {
-                        name: 'generateImage',
-                        description: 'Generates an image based on a prompt.',
-                        parameters: {
-                            type: 'object',
-                            properties: {
-                                prompt: { type: 'string', description: 'A detailed prompt for the image generation model.' },
-                                size: { type: 'string', enum: ['1024x1024', '1024x1792', '1792x1024'] },
-                            },
-                            required: ['prompt', 'size']
-                        }
+                        Informacije o biznisu korisnika:
+                        - Ime kompanije: ${userBrain?.company_name || 'Nije uneto'}
+                        - Industrija: ${userBrain?.industry || 'Nije uneto'}
+                        - Ciljevi: ${userBrain?.goals?.join(', ') || 'Nisu uneti'}
+                      `
                     }
-                }]
+                ],
             })
         });
 
         const data = await response.json();
-        const message = data.choices[0].message;
+        const aiMessageContent = data.choices[0].message.content;
+        console.log("Full AI Response:", aiMessageContent);
 
-        if (message.tool_calls) {
-            const toolCall = message.tool_calls[0];
-            if (toolCall.function.name === 'generateImage') {
-                const args = JSON.parse(toolCall.function.arguments);
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  role: 'assistant',
-                  content: 'Naravno, kreiram vizual za Vas. Ovo može potrajati 15-20 sekundi...'
-                }]);
-                await handleImageGeneration(args.prompt, args.size);
-            }
-        } else {
-            const newAssistantMessage: Message = { id: Date.now().toString() + 'a', role: 'assistant', content: message.content };
-            setMessages(prev => [...prev, newAssistantMessage]);
+        try {
+          const parsedResponse = JSON.parse(aiMessageContent);
+          
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: 'U redu, pripremam vašu objavu. Generisanje slike može potrajati 15-20 sekundi...'
+          }]);
+          
+          const promptForImage = parsedResponse.notes || currentUserMessage.content;
+          const detectedSize = detectSizeFromText(currentUserMessage.content);
+
+          await handleImageGeneration(
+            promptForImage,
+            detectedSize,
+            parsedResponse
+          );
+
+        } catch (e) {
+          console.error("Failed to parse AI response as JSON or generate image:", e);
+          const newAssistantMessage: Message = { id: Date.now().toString() + 'a', role: 'assistant', content: "Došlo je do greške pri obradi odgovora. Molim vas pokušajte ponovo." };
+          setMessages(prev => [...prev, newAssistantMessage]);
         }
     } catch (error) {
         console.error("Error sending message:", error);
+         const errorMessage: Message = {
+          id: 'error',
+          role: 'assistant',
+          content: 'Došlo je do greške prilikom komunikacije sa AI asistentom. Proverite konzolu za detalje.'
+        };
+        setMessages(prev => [...prev, errorMessage]);
     } finally {
         setIsLoading(false);
     }
