@@ -9,6 +9,9 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  type?: 'remove_bg_result';
+  imageUrl?: string; // preview URL (prefer local savedUrl)
+  savedUrl?: string; // persisted URL from server
 }
 
 const SocialMediaScreen: React.FC = () => {
@@ -18,6 +21,7 @@ const SocialMediaScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [socialPost, setSocialPost] = useState<SocialPost | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (!authLoading && profile) {
@@ -64,6 +68,46 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
     // Default: square post
     if (/(post|instagram post|kvadrat|square|1x1|1080x1080)/.test(t)) return '1024x1024';
     return '1024x1024';
+  };
+
+  // Detekcija zahteva za skidanje pozadine
+  const isRemoveBgRequest = (text: string) => {
+    const t = text.toLowerCase();
+    return /(skini|ukloni|obrisi)\s+pozadin(u|a)|remove\s+background|bez\s+pozadine|zameni\s+pozadinu/.test(t);
+  };
+
+  const handleRemoveBackground = async (file: File, userPrompt: string) => {
+    try {
+      const form = new FormData();
+      form.append('image', file);
+      form.append('prompt', 'transparent background, remove background');
+      form.append('save', 'true');
+
+      const resp = await fetch('/api/ideogram/replace-background', {
+        method: 'POST',
+        body: form,
+      });
+      if (!resp.ok) {
+        throw new Error(`replace-background failed: ${resp.status}`);
+      }
+      const data = await resp.json();
+      const previewUrl = data.savedUrl || data.url;
+      const msg: Message = {
+        id: `rb_${Date.now()}`,
+        role: 'assistant',
+        content: 'Slika bez pozadine je spremna. Možete je preuzeti ili koristiti za post.',
+        type: 'remove_bg_result',
+        imageUrl: previewUrl,
+        savedUrl: previewUrl,
+      };
+      setMessages(prev => [...prev, msg]);
+    } catch (e) {
+      console.error('remove background error:', e);
+      setMessages(prev => [...prev, { id: `rb_err_${Date.now()}`, role: 'assistant', content: 'Nije uspelo uklanjanje pozadine. Pokušajte ponovo.' }]);
+    } finally {
+      setAttachedFile(null);
+      setIsLoading(false);
+    }
   };
 
   const handleImageGeneration = async (promptForImage: string, size: '1024x1024' | '1024x1792' | '1792x1024' = '1024x1024', postData: Omit<SocialPost, 'imageUrl' | 'size'>) => {
@@ -117,6 +161,17 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
     setMessages(prev => [...prev, currentUserMessage]);
     setInputMessage('');
     setIsLoading(true);
+
+    // Ako je zahtev za skidanje pozadine → obradi odmah preko Ideogram endpointa
+    if (isRemoveBgRequest(currentUserMessage.content)) {
+      if (!attachedFile) {
+        setMessages(prev => [...prev, { id: `need_img_${Date.now()}`, role: 'assistant', content: 'Dodajte sliku pomoću ikone spajalice ispod, pa ponovo pošaljite: “skini pozadinu”.' }]);
+        setIsLoading(false);
+        return;
+      }
+      await handleRemoveBackground(attachedFile, currentUserMessage.content);
+      return;
+    }
 
     try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -215,8 +270,55 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
               <div key={msg.id} className={`flex items-start gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {msg.role === 'assistant' && <img src={logoSrc} alt="AI" className="w-9 h-9 rounded-full shadow-lg" />}
                 <div className={`max-w-[85%] rounded-2xl px-5 py-3.5 shadow-xl transition-all duration-300 ${msg.role === 'user' ? 'bg-gradient-to-br from-[#F56E36] to-[#d15a2c] rounded-br-none' : 'bg-white/5 border border-white/10 rounded-bl-none'}`}>
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-        </div>
+                  {msg.type === 'remove_bg_result' && msg.imageUrl ? (
+                    <div className="space-y-3">
+                      <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      <img src={msg.imageUrl} alt="Bez pozadine" className="w-full max-h-72 object-contain rounded-lg border border-white/10" />
+                      <div className="flex gap-3">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const r = await fetch(msg.imageUrl!);
+                              const b = await r.blob();
+                              const url = URL.createObjectURL(b);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `slika_bez_pozadine.png`;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                            } catch (e) {
+                              console.error('download error', e);
+                            }
+                          }}
+                          className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white rounded-lg border border-white/15"
+                        >
+                          Preuzmi PNG
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSocialPost({
+                              title: 'Slika bez pozadine',
+                              caption: '',
+                              hashtags: [],
+                              imageUrl: msg.imageUrl!,
+                              size: '1024x1024',
+                              cta: '',
+                              notes: 'Korisnik uklonio pozadinu preko Ideogram-a',
+                            });
+                            setMessages(prev => [...prev, { id: `used_${Date.now()}`, role: 'assistant', content: 'U redu! Ubacio sam sliku bez pozadine u desni panel. Možete je dalje urediti.' }]);
+                          }}
+                          className="px-4 py-2 bg-gradient-to-r from-[#F56E36] to-[#5a67d8] text-white rounded-lg font-semibold"
+                        >
+                          Iskoristi za post
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  )}
+                </div>
               </div>
             ))}
             {isLoading && (
@@ -244,6 +346,14 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                 className="w-full bg-black/20 border border-white/15 rounded-xl p-4 pr-16 resize-none focus:outline-none focus:ring-2 focus:ring-[#F56E36]/80 transition-all focus:shadow-[0_0_15px_rgba(245,110,54,0.5)]"
                 rows={2}
               />
+              {/* Attach image */}
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                <label className="cursor-pointer text-white/70 hover:text-white" title="Dodaj sliku">
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => setAttachedFile(e.target.files?.[0] || null)} />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828L18 9.828a4 4 0 00-5.657-5.657L5.05 11.464"/></svg>
+                </label>
+                {attachedFile && <span className="text-xs text-white/60">{attachedFile.name}</span>}
+              </div>
               <button onClick={handleSendMessage} disabled={isLoading} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white disabled:opacity-50">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14m-2-5l7 7-7 7" /></svg>
               </button>
