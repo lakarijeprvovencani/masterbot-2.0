@@ -9,6 +9,7 @@ export default {
       backgroundImage: {
         'radial-gradient': 'radial-gradient(circle at center, rgba(255,255,255,0.1), transparent 40%)',
         'hero-gradient': 'radial-gradient(ellipse at 70% 40%, #8A2BE2, transparent 70%)',
+        'editor-gradient': 'linear-gradient(145deg, #0d1240, #1e234e 60%, #4a2e5a)',
       },
       keyframes: {
         'fade-in-up': {

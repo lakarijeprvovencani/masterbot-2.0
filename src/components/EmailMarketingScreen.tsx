@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import logoSrc from '../assets/images/logobotprovidan.png';
 import mascotImage from '../assets/images/logobotprovidan.png'; // Vraćamo logo
 import Sidebar from './Sidebar';
+import EmailEditorPanel from './EmailEditorPanel';
 
 interface Message {
   id: string;
@@ -10,18 +11,24 @@ interface Message {
   content: string;
 }
 
+interface EmailContent {
+  subject: string;
+  body: string;
+}
+
 const EmailMarketingScreen: React.FC = () => {
-  const { profile, userBrain } = useAuth();
+  const { profile, userBrain, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
   const [activeIdea, setActiveIdea] = useState<string | null>(null);
+  const [emailContent, setEmailContent] = useState<EmailContent | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (profile) { // Proveravamo da li je profile dostupan
+    if (!authLoading && profile) {
       const firstName = profile.full_name?.split(' ')[0] || 'kolega';
       setMessages([
         {
@@ -30,8 +37,17 @@ const EmailMarketingScreen: React.FC = () => {
           content: `Zdravo ${firstName}! 👋 Ja sam tvoj Masterbot Email Asistent. Spreman sam da ti pomognem da kreiraš email kampanje koje donose rezultate. Šta danas pravimo?`
         }
       ]);
+    } else if (!authLoading && !profile) {
+      // Handle case where user is not logged in or profile is not found
+      setMessages([
+        {
+          id: 'initial',
+          role: 'assistant',
+          content: 'Zdravo! 👋 Izgleda da niste prijavljeni. Molimo vas da se prijavite kako biste koristili Email Asistenta.'
+        }
+      ]);
     }
-  }, [profile]);
+  }, [profile, authLoading]);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(scrollToBottom, [messages]);
@@ -65,7 +81,17 @@ const EmailMarketingScreen: React.FC = () => {
               - Analiza: ${userBrain?.analysis?.substring(0, 300)}...
               ${activeIdea ? `\nFokus trenutne kampanje: ${activeIdea}` : ''}
 
-              Tvoj zadatak je da pomogneš korisniku da kreira EFEKTNE email kampanje. Budi kreativan, profesionalan i uvek koristi informacije o biznisu da daš personalizovane savete. Piši naslove (subject), telo emaila, pozive na akciju (CTA), i deli savete o A/B testiranju, segmentaciji i analitici. Uvek piši na srpskom jeziku.`
+              Tvoj zadatak je da pomogneš korisniku da kreira EFEKTNE email kampanje. Budi kreativan, profesionalan i uvek koristi informacije o biznisu da daš personalizovane savete. Piši naslove (subject), telo emaila, pozive na akciju (CTA), i deli savete o A/B testiranju, segmentaciji i analitici. 
+              
+              Kada korisnik zatraži da mu se napiše email, UVEK formatiraj odgovor koristeći sledeće tagove:
+              [SUBJECT]
+              Tvoj naslov ovde
+              [/SUBJECT]
+              [BODY]
+              Tvoje telo emaila ovde
+              [/BODY]
+              
+              Uvek piši na srpskom jeziku.`
             },
             ...messages.map(msg => ({ role: msg.role, content: msg.content })),
             { role: 'user', content: inputMessage }
@@ -78,8 +104,29 @@ const EmailMarketingScreen: React.FC = () => {
 
       const data = await response.json();
       const aiResponse = data.choices[0].message.content;
-      const assistantMessage: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: aiResponse };
-      setMessages(prev => [...prev, assistantMessage]);
+
+      // Parse email content
+      const subjectMatch = aiResponse.match(/\[SUBJECT\]\s*([\s\S]*?)\s*\[\/SUBJECT\]/);
+      const bodyMatch = aiResponse.match(/\[BODY\]\s*([\s\S]*?)\[\/BODY\]/);
+
+      if (subjectMatch && bodyMatch) {
+        setEmailContent({
+          subject: subjectMatch[1].trim(),
+          body: bodyMatch[1].trim(),
+        });
+
+        // Add a confirmation message instead of the full email
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Email je spreman! Možete ga pregledati i izmeniti u editoru sa desne strane. Ako želite nešto drugo, samo mi recite!',
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } else {
+        // If not a structured email, just add the response to the chat
+        const assistantMessage: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: aiResponse };
+        setMessages(prev => [...prev, assistantMessage]);
+      }
     } catch (error) {
       console.error('Greška:', error);
       const errorMessage: Message = { id: 'error', role: 'assistant', content: 'Izvinjavam se, došlo je do greške. Pokušajte ponovo.' };
@@ -132,14 +179,25 @@ const EmailMarketingScreen: React.FC = () => {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="flex h-screen bg-[#040A3E] items-center justify-center text-white">
+        <div className="flex flex-col items-center space-y-4">
+          <img src={logoSrc} alt="Loading..." className="w-24 h-24 animate-pulse" />
+          <p className="text-xl">Učitavanje vašeg asistenta...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-[#040A3E] text-white font-sans overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex pl-20 bg-gradient-to-br from-[#040A3E] via-[#0D1240] to-[#040A3E]">
         {/* Leva strana - Chat */}
-        <div className="w-[55%] flex flex-col h-full backdrop-blur-xl bg-black/20 border-r border-white/10">
+        <div className="w-2/5 flex flex-col h-full backdrop-blur-xl bg-black/20 border-r border-white/10">
           <div className="p-6 border-b border-white/10 flex justify-between items-center">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-[#F56E36] to-[#d15a2c] bg-clip-text text-transparent">Masterbot Email Asistent</h1>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-[#F56E36] to-[#d15a2c] bg-clip-text text-transparent">Masterbot Email Asistent</h1>
             <div className="px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20 text-xs text-green-400 font-semibold flex items-center space-x-1.5 shadow-[0_0_10px_rgba(52,211,153,0.5)]">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               <span>ONLINE</span>
@@ -241,10 +299,22 @@ const EmailMarketingScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Desna strana - Vizuelni identitet */}
-        <div className="w-[45%] flex items-center justify-center p-8 relative overflow-hidden">
-          <div className="absolute inset-0 bg-hero-gradient opacity-40"></div>
-          <img src={mascotImage} alt="Masterbot Mascot" className="max-w-lg w-full animate-fade-in-up transform transition-transform duration-500 hover:scale-105 z-10" />
+        {/* Desna strana - Vizuelni identitet / Editor */}
+        <div className="w-3/5 p-8 relative">
+          <div className="absolute inset-0 bg-hero-gradient opacity-40 z-0"></div>
+          <div className="relative w-full h-full z-10">
+            {emailContent ? (
+              <EmailEditorPanel
+                initialSubject={emailContent.subject}
+                initialBody={emailContent.body}
+                onClose={() => setEmailContent(null)}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <img src={mascotImage} alt="Masterbot Mascot" className="max-w-lg w-full animate-fade-in-up transform transition-transform duration-500 hover:scale-105" />
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>

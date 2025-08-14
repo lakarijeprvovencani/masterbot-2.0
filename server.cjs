@@ -3,17 +3,24 @@
  * Rešava CORS problem - skida sajtove sa servera
  */
 
-const express = require('express')
-const cors = require('cors')
-const app = express()
-const PORT = 4001
+require('dotenv').config({ path: '.env.local' });
+const express = require('express');
+const cors = require('cors');
+const puppeteer = require('puppeteer');
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
+const fetch = require('node-fetch');
+
+const app = express();
+const port = process.env.PORT || 4001;
 
 // Node.js 18+ ima built-in fetch
-const fetch = globalThis.fetch || require('node-fetch')
+// const fetch = globalThis.fetch || require('node-fetch')
 
 // Middleware
 app.use(cors())
 app.use(express.json())
+app.use(express.static('dist'));
 
 // Website Scraper endpoint
 app.post('/api/scrape-website', async (req, res) => {
@@ -76,7 +83,55 @@ app.post('/api/scrape-website', async (req, res) => {
   }
 })
 
-// Funkcija za čišćenje HTML-a
+app.post('/api/generate-ideogram-image', async (req, res) => {
+  console.log('--- Primljen zahtev za generisanje slike ---');
+  console.log('Telo zahteva:', JSON.stringify(req.body, null, 2));
+
+  const { prompt, aspect_ratio, model } = req.body;
+  const apiKey = process.env.VITE_IDEOGRAM_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Ideogram API key not configured on the server.' });
+  }
+
+  try {
+    // 1. Initiate generation
+    const genRes = await fetch('https://api.ideogram.ai/v1/ideogram-v3/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Api-Key': apiKey,
+      },
+      body: JSON.stringify({ 
+        prompt, 
+        aspect_ratio, 
+        // model: model, // Uklanjamo model, API ga ne zahteva za v3
+        rendering_speed: "TURBO" 
+      }),
+    });
+
+    if (!genRes.ok) {
+      const errorBody = await genRes.json();
+      console.error('!!! GREŠKA OD IDEOGRAM API-ja !!!');
+      console.error(JSON.stringify(errorBody, null, 2));
+      return res.status(genRes.status).json(errorBody);
+    }
+
+    // Uspeh! V3 API vraća podatke odmah, nema potrebe za "pollingom".
+    const genData = await genRes.json();
+    
+    // Vraćamo odgovor u formatu koji frontend očekuje
+    res.json({ images: [{ url: genData.data[0].url }] });
+
+  } catch (error) {
+    console.error('Error in Ideogram proxy:', error);
+    res.status(500).json({ error: 'Failed to generate image via proxy.' });
+  }
+});
+
+/**
+ * Funkcija za čišćenje HTML-a
+ */
 function cleanHTML(html) {
   let text = html
   
@@ -114,7 +169,7 @@ app.get('/api/health', (req, res) => {
 })
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Backend server pokrenut na portu ${PORT}`)
-  console.log(`🌐 Website scraper dostupan na: http://localhost:${PORT}/api/scrape-website`)
-})
+app.listen(port, () => {
+  console.log(`🚀 Backend server pokrenut na portu ${port}`);
+  console.log(`🌐 Website scraper dostupan na: http://localhost:${port}/api/scrape-website`);
+});
