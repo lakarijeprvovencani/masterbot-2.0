@@ -34,6 +34,49 @@ if (!fs.existsSync(uploadsDir)) {
 app.use('/api/uploads', express.static(uploadsDir));
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Helpers for history (in-file, simple array fallback if Supabase isn't used from server)
+const historyStore = [];
+
+app.post('/api/history', async (req, res) => {
+  try {
+    const { userId, type, title, caption, hashtags, cta, imageUrl, size } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const item = {
+      id: `h_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+      user_id: userId,
+      type: type || 'generated',
+      title: title || '',
+      caption: caption || '',
+      hashtags: Array.isArray(hashtags) ? hashtags : [],
+      cta: cta || '',
+      image_url: imageUrl || '',
+      size: size || '1024x1024',
+      created_at: new Date().toISOString(),
+    };
+    historyStore.push(item);
+    // In production, prefer Supabase RPC from frontend with RLS
+    res.json({ ok: true, item });
+  } catch (e) {
+    console.error('history error', e);
+    res.status(500).json({ error: 'history failed' });
+  }
+});
+
+app.get('/api/history', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const sevenDaysAgo = Date.now() - 7*24*60*60*1000;
+    const items = historyStore
+      .filter(x => x.user_id === userId && new Date(x.created_at).getTime() >= sevenDaysAgo)
+      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 200);
+    res.json({ items });
+  } catch (e) {
+    res.status(500).json({ error: 'history failed' });
+  }
+});
+
 // Website Scraper endpoint
 app.post('/api/scrape-website', async (req, res) => {
   try {
