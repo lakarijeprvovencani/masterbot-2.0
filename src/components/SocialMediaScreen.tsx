@@ -29,6 +29,54 @@ const SocialMediaScreen: React.FC = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState<any[]>([]);
 
+  // Sačuvaj stavku u istoriju (Supabase)
+  const saveHistory = async (item: {
+    type: 'generated' | 'bg_replace';
+    title?: string;
+    caption?: string;
+    hashtags?: string[];
+    cta?: string;
+    image_url: string;
+    size?: '1024x1024' | '1024x1792' | '1792x1024';
+  }) => {
+    try {
+      if (!profile?.id) return;
+      const { error } = await supabase.from('post_history').insert({
+        user_id: profile.id,
+        type: item.type,
+        title: item.title ?? null,
+        caption: item.caption ?? null,
+        hashtags: item.hashtags ?? [],
+        cta: item.cta ?? null,
+        image_url: item.image_url,
+        size: item.size ?? '1024x1024',
+      });
+      if (error) console.warn('Supabase saveHistory error:', error.message);
+    } catch (e) {
+      console.warn('Supabase saveHistory failed', e);
+    }
+  };
+
+  // Učitaj istoriju poslednjih 7 dana (Supabase)
+  const loadHistory = async () => {
+    try {
+      if (!profile?.id) { setHistoryItems([]); return; }
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('post_history')
+        .select('*')
+        .eq('user_id', profile.id)
+        .gte('created_at', sevenDaysAgo)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      setHistoryItems(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.warn('Supabase loadHistory failed', e);
+      setHistoryItems([]);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && profile) {
       const firstName = profile.full_name?.split(' ')[0] || 'kolega';
@@ -451,7 +499,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                 <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                 <span>ONLINE</span>
               </div>
-            </div>
+          </div>
         </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
