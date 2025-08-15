@@ -307,6 +307,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
         imageUrl: imageUrl,
         size: size,
       });
+      await saveHistory({ type: 'generated', title: postData.title, caption: postData.caption, hashtags: postData.hashtags, cta: postData.cta, image_url: imageUrl, size });
 
       const newAssistantMessage: Message = {
         id: Date.now().toString() + 'a',
@@ -445,16 +446,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
           <div className="p-6 border-b border-white/10 flex justify-between items-center">
             <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Social Media Asistent</h1>
             <div className="flex items-center gap-3">
-              <button onClick={async () => {
-                setIsHistoryOpen(prev => !prev);
-                if (!isHistoryOpen && profile?.id) {
-                  try {
-                    const resp = await fetch(`/api/history?userId=${encodeURIComponent(profile.id)}`);
-                    const data = await resp.json();
-                    setHistoryItems(Array.isArray(data.items) ? data.items : []);
-                  } catch {}
-                }
-              }} className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/15 text-xs">History (7d)</button>
+              <button onClick={async () => { if (!isHistoryOpen) await loadHistory(); setIsHistoryOpen(prev => !prev); }} className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/15 text-xs">Istorija (7 dana)</button>
               <div className="px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20 text-xs text-green-400 font-semibold flex items-center space-x-1.5 shadow-[0_0_10px_rgba(52,211,153,0.5)]">
                 <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                 <span>ONLINE</span>
@@ -463,26 +455,29 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
         </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+            {/* Istorija - modal */}
             {isHistoryOpen && (
-              <div className="mb-4 p-4 border border-white/10 rounded-xl bg-white/5">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm text-white/80">Poslednje objave (7 dana)</h3>
-                  <button onClick={() => setIsHistoryOpen(false)} className="text-white/60 hover:text-white text-xs">Zatvori</button>
-                </div>
-                <div className="grid grid-cols-2 gap-3 max-h-64 overflow-auto pr-1">
-                  {historyItems.map((it) => (
-                    <div key={it.id} className="flex items-center gap-3 p-2 bg-black/20 rounded-lg border border-white/10">
-                      <img src={it.image_url} className="w-14 h-14 object-cover rounded" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs text-white/90 truncate">{it.title || (it.type === 'bg_replace' ? 'BG Replace' : 'Generated')}</div>
-                        <div className="text-[11px] text-white/50">{new Date(it.created_at).toLocaleString()}</div>
+              <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-editor-gradient w-[720px] max-w-[90vw] max-h-[80vh] rounded-2xl border border-white/10 shadow-2xl p-5 overflow-hidden">
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-lg font-semibold text-white">Istorija (poslednjih 7 dana)</h3>
+                    <button onClick={() => setIsHistoryOpen(false)} className="text-white/70 hover:text-white">Zatvori</button>
+                  </div>
+                  <div className="overflow-auto pr-1 max-h-[65vh] grid grid-cols-1 gap-3">
+                    {historyItems.map((it) => (
+                      <div key={it.id} className="flex items-center gap-3 p-2 bg-black/20 rounded-lg border border-white/10">
+                        <img src={it.image_url} className="w-16 h-16 object-cover rounded" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-white/90 truncate">{it.title || (it.type === 'bg_replace' ? 'Zamenjena pozadina' : 'Generisana objava')}</div>
+                          <div className="text-[11px] text-white/50">{new Date(it.created_at).toLocaleString()}</div>
+                        </div>
+                        <button onClick={() => { setSocialPost({ title: it.title || 'Objava', caption: it.caption || '', hashtags: it.hashtags || [], imageUrl: it.image_url, size: it.size || '1024x1024', cta: it.cta || 'Saznaj više' }); setIsHistoryOpen(false); }} className="text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Otvori</button>
                       </div>
-                      <button onClick={() => setSocialPost({ title: it.title || 'Objava', caption: it.caption || '', hashtags: it.hashtags || [], imageUrl: it.image_url, size: it.size || '1024x1024', cta: it.cta || 'Saznaj više' })} className="text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Otvori</button>
-                    </div>
-                  ))}
-                  {historyItems.length === 0 && (
-                    <div className="text-white/60 text-sm">Nema sačuvanih objava u poslednjih 7 dana.</div>
-                  )}
+                    ))}
+                    {historyItems.length === 0 && (
+                      <div className="text-white/70 text-sm">Još uvek nema sačuvanih stavki u poslednjih 7 dana.</div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -530,15 +525,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                                 notes: 'Slika sa izmenjenom pozadinom – dodajte caption i heštegove ručno.'
                               });
                               setMessages(prev => [...prev, { id: `used_${Date.now()}`, role: 'assistant', content: 'Sliku sam ubacio u desni panel. Dodajte caption i heštegove po želji – polja su editabilna.' }]);
-                              if (profile?.id) {
-                                try {
-                                  await fetch('/api/history', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ userId: profile.id, type: 'bg_replace', title: 'Objava', caption: '', hashtags: [], cta: 'Saznaj više', imageUrl: msg.imageUrl!, size: '1024x1024' })
-                                  });
-                                } catch {}
-                              }
+                              await saveHistory({ type: 'bg_replace', title: 'Objava', caption: '', hashtags: [], cta: 'Saznaj više', image_url: msg.imageUrl!, size: '1024x1024' });
                             } catch (e) {
                               console.error('generate from image error', e);
                               setMessages(prev => [...prev, { id: `gerr_${Date.now()}`, role: 'assistant', content: 'Nije uspelo pripremanje posta. Pokušajte ponovo.' }]);
