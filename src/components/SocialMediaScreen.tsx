@@ -9,7 +9,7 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  type?: 'remove_bg_result';
+  type?: 'replace_bg_result' | 'remove_bg_result';
   imageUrl?: string; // preview URL (prefer local savedUrl)
   savedUrl?: string; // persisted URL from server
 }
@@ -22,6 +22,9 @@ const SocialMediaScreen: React.FC = () => {
   const [socialPost, setSocialPost] = useState<SocialPost | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [lastImageFile, setLastImageFile] = useState<File | null>(null);
+  const [isGeneratingFromImage, setIsGeneratingFromImage] = useState(false);
+  const [lastBgIntentText, setLastBgIntentText] = useState<string>('');
 
   useEffect(() => {
     if (!authLoading && profile) {
@@ -70,17 +73,181 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
     return '1024x1024';
   };
 
-  // Detekcija zahteva za skidanje pozadine
-  const isRemoveBgRequest = (text: string) => {
-    const t = text.toLowerCase();
-    return /(skini|ukloni|obrisi)\s+pozadin(u|a)|remove\s+background|bez\s+pozadine|zameni\s+pozadinu/.test(t);
+  // Detekcija da li korisnik traži potpuno novu objavu/vizual
+  const isNewPostRequest = (text: string) => {
+    const t = (text || '').toLowerCase();
+    return /(napravi|generiši|generisi|kreiraj).*(post|vizual|sliku|baner|story|kaver|hero)/.test(t);
+  };
+
+  // Detekcija zahteva za promenu/zamenu pozadine – robustno i jezički tolerantno
+  const isReplaceBgRequest = (text: string) => {
+    const t = text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, ''); // ukloni dijakritike
+    // primeri: "zameni pozadinu za pustinju", "promeni mi pozadinu u svemir"
+    return /(promeni|zameni|izmeni)\s+(mi\s+)?pozadin[au]/.test(t);
+  };
+
+  // Izvuci sirov opis nove pozadine iza konektora (u/za/na/sa...) – bez prevođenja, to radi backend
+  const extractBackgroundPrompt = (text: string): string => {
+    if (!text) return '';
+    const t = text
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    // Uhvati sve posle "pozadina/pozadinu" i opcionalnog konektora
+    const m = t.match(/pozadin[au]\s*(?:u|za|na|sa|with|to|in)?\s*(.+)$/i);
+    if (m && m[1]) {
+      return m[1].replace(/^[,.;:-]+/, '').trim();
+    }
+    return t;
+  };
+
+  // Ukloni sliku iz određene korisničke poruke (bez brisanja teksta)
+  const removeImageFromMessage = (id: string) => {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, imageUrl: undefined } : m));
+  };
+
+  // Ekstrahuj ključne tematske reči iz konteksta (svemir/pustinja/sneg/šuma/plaža...)
+  const extractThemeKeywords = (text: string): string[] => {
+    const t = (text || '').toLowerCase();
+    const kws: string[] = [];
+    if (/(svemir|kosmos|galaks|zvezd)/.test(t)) kws.push('svemir', 'galaksija', 'zvezde');
+    if (/(pustin|pesak|dine|desert)/.test(t)) kws.push('pustinja', 'pesak', 'dine');
+    if (/(sneg|zima|winter)/.test(t)) kws.push('sneg', 'zimski ambijent');
+    if (/(šuma|suma|drve|forest|woods)/.test(t)) kws.push('šuma', 'drveće');
+    if (/(more|plaža|plaza|ocean|beach)/.test(t)) kws.push('plaža', 'more', 'talasi');
+    if (/(grad|ulica|city|urban)/.test(t)) kws.push('grad', 'urbani ambijent');
+    return Array.from(new Set(kws));
+  };
+
+  // Vraća few-shot JSON primer na osnovu teme da izbegnemo generičke fraze
+  const buildThemeFewShot = (themes: string[]) => {
+    if (themes.includes('pustinja')) {
+      return {
+        user: 'Primer: Pustinja/dine',
+        assistant: {
+          title: 'Dah pustinje',
+          caption: 'Zlatne dine i topao vetar stvaraju minimalizam koji privlači pogled. Kontrasti peska i senki daju moćnu eleganciju.',
+          hashtags: ['#pustinja', '#dine', '#pesak', '#minimalizam', '#sunce', '#toplina', '#negativanprostor'],
+          cta: 'Saznaj više',
+          notes: 'Tema: pustinja, dine, zlatni tonovi'
+        }
+      };
+    }
+    if (themes.includes('svemir')) {
+      return {
+        user: 'Primer: Svemir/galaksija',
+        assistant: {
+          title: 'Galaktički sjaj',
+          caption: 'Zvezdana prašina i spirale galaksije oblikuju futurističku energiju vizuala. Osećaj beskraja daje snažan akcenat brendu.',
+          hashtags: ['#svemir', '#galaksija', '#zvezde', '#futurizam', '#mistika', '#noćneneon'],
+          cta: 'Saznaj više',
+          notes: 'Tema: svemir, galaksije'
+        }
+      };
+    }
+    if (themes.includes('sneg')) {
+      return {
+        user: 'Primer: Sneg/zima',
+        assistant: {
+          title: 'Zimski mir',
+          caption: 'Mraz i meko svetlo prave kristalnu atmosferu. Tišina snega pojačava fokus na proizvod i poruku.',
+          hashtags: ['#zima', '#sneg', '#mraz', '#tišina', '#minimalno', '#hladniTonovi'],
+          cta: 'Saznaj više',
+          notes: 'Tema: sneg, zimski ambijent'
+        }
+      };
+    }
+    if (themes.includes('šuma')) {
+      return {
+        user: 'Primer: Šuma/drveće',
+        assistant: {
+          title: 'Smaragdna tišina',
+          caption: 'Zelene krošnje i difuzno svetlo stvaraju prirodan luksuz. Tekst istaknite na prozračnim tamnim površinama.',
+          hashtags: ['#šuma', '#priroda', '#drveće', '#svetlost', '#smaragdno', '#eko'],
+          cta: 'Saznaj više',
+          notes: 'Tema: šuma, priroda'
+        }
+      };
+    }
+    return null;
+  };
+
+  // Generiši sadržaj objave analizom slike (GPT-4o, srpski izlaz)
+  const generatePostFromImage = async (imageUrl: string, contextText: string = ''): Promise<SocialPost> => {
+    const brandTone = userBrain?.brand_tone || 'samouvereno, moderno';
+    const brandColors = Array.isArray((userBrain as any)?.brand_colors) ? (userBrain as any).brand_colors : ['#040A3E', '#F56E36'];
+    const audience = userBrain?.target_audience || 'opšta publika';
+    const sys = 'Ti si ekspert za društvene mreže. Odgovaraj isključivo na srpskom i striktno u JSON formatu.';
+    const themes = extractThemeKeywords(contextText);
+    const banned = 'NE KORISTI generičke fraze u captionu tipa: "Podeli priču sa pratiocima", "Pogledaj novi vizual", "Uživaj u...". Budi konkretan i tematski.';
+    const req = `Analiziraj priloženu sliku i generiši: kratki naslov, caption (1–3 rečenice), 8–12 hashtagova (array) i kratak CTA. Vrati TAČNO JSON: {"title":"...","caption":"...","hashtags":["#..."],"cta":"...","notes":"..."}. Uskladi sadržaj sa korisničkim kontekstom: ${contextText}. Tematske ključne reči: [${themes.join(', ')}]. ${banned} U notes sažmi temu i atmosferu. Stil uskladi sa brendom (tone: ${brandTone}, colors: ${brandColors.join(', ')}, audience: ${audience}).`;
+
+    const few = buildThemeFewShot(themes);
+
+    async function callOnce(instruction: string): Promise<any> {
+      const baseMessages: any[] = [ { role: 'system', content: sys } ];
+      if (few) {
+        baseMessages.push({ role: 'user', content: few.user });
+        baseMessages.push({ role: 'assistant', content: JSON.stringify(few.assistant) });
+      }
+      baseMessages.push({
+        role: 'user',
+        content: [ { type: 'text', text: instruction }, { type: 'image_url', image_url: { url: imageUrl } } ]
+      });
+
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          temperature: 0.8,
+          response_format: { type: 'json_object' },
+          messages: baseMessages
+        })
+      });
+      const data = await resp.json();
+      const txt = data?.choices?.[0]?.message?.content || '{}';
+      try { return JSON.parse(txt); } catch { return {}; }
+    }
+
+    let parsed = await callOnce(req);
+    if (!parsed?.caption || !Array.isArray(parsed?.hashtags) || parsed.hashtags.length === 0) {
+      const stronger = req + ' OBAVEZNO popuni SVA polja i koristi ključne reči iz konteksta. JSON i NIŠTA DRUGO.';
+      parsed = await callOnce(stronger);
+    }
+
+    // Normalizacija potencijalno drugačijih ključeva
+    const normalizedCaption = parsed?.caption || parsed?.description || parsed?.text || '';
+    let normalizedHashtags: string[] = [];
+    if (Array.isArray(parsed?.hashtags)) normalizedHashtags = parsed.hashtags;
+    else if (typeof parsed?.hashtags === 'string') normalizedHashtags = parsed.hashtags.split(/[\s,]+/).filter(Boolean);
+    else if (typeof parsed?.tags === 'string') normalizedHashtags = parsed.tags.split(/[\s,]+/).filter(Boolean);
+
+    const post: SocialPost = {
+      title: parsed?.title || 'Objava',
+      caption: normalizedCaption || 'Tematski vizual spreman za objavu.',
+      hashtags: normalizedHashtags.length ? normalizedHashtags : ['#marketing', '#objava', '#vizual', '#brend', '#inspiracija'],
+      imageUrl,
+      size: '1024x1024',
+      cta: parsed?.cta || 'Saznaj više',
+      notes: parsed?.notes || ''
+    };
+    return post;
   };
 
   const handleRemoveBackground = async (file: File, userPrompt: string) => {
     try {
       const form = new FormData();
       form.append('image', file);
-      form.append('prompt', 'transparent background, remove background');
+      // koristimo replace-background sa opisom pozadine
+      // Pošalji kompletan korisnički unos → backend GPT izvlači opis pozadine
+      form.append('prompt', userPrompt);
       form.append('save', 'true');
 
       const resp = await fetch('/api/ideogram/replace-background', {
@@ -95,15 +262,17 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
       const msg: Message = {
         id: `rb_${Date.now()}`,
         role: 'assistant',
-        content: 'Slika bez pozadine je spremna. Možete je preuzeti ili koristiti za post.',
-        type: 'remove_bg_result',
+        content: 'Nova pozadina je spremna. Možete je preuzeti ili koristiti za post.',
+        type: 'replace_bg_result',
         imageUrl: previewUrl,
         savedUrl: previewUrl,
       };
       setMessages(prev => [...prev, msg]);
+      setLastImageFile(file);
+      setLastBgIntentText(userPrompt);
     } catch (e) {
-      console.error('remove background error:', e);
-      setMessages(prev => [...prev, { id: `rb_err_${Date.now()}`, role: 'assistant', content: 'Nije uspelo uklanjanje pozadine. Pokušajte ponovo.' }]);
+      console.error('replace background error:', e);
+      setMessages(prev => [...prev, { id: `rb_err_${Date.now()}`, role: 'assistant', content: 'Nije uspela promena pozadine. Pokušajte ponovo.' }]);
     } finally {
       setAttachedFile(null);
       setIsLoading(false);
@@ -157,37 +326,51 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
-    const currentUserMessage: Message = { id: Date.now().toString(), role: 'user', content: inputMessage };
+    const wantsReplaceBg = isReplaceBgRequest(inputMessage);
+    const newPostReq = isNewPostRequest(inputMessage);
+
+    // Ako korisnik započinje novu objavu (a ne zamenu pozadine), očisti kontekst prethodne slike
+    if (newPostReq && !wantsReplaceBg) {
+      setLastImageFile(null);
+      setLastBgIntentText('');
+    }
+
+    // Prikaži sliku u poruci samo ako je nova priložena ili ako se eksplicitno menja pozadina
+    const fileForThisMessage = attachedFile || (wantsReplaceBg ? lastImageFile : null);
+    const userImageUrl = fileForThisMessage ? URL.createObjectURL(fileForThisMessage) : undefined;
+    const currentUserMessage: Message = { id: Date.now().toString(), role: 'user', content: inputMessage, imageUrl: userImageUrl };
     setMessages(prev => [...prev, currentUserMessage]);
+    setLastBgIntentText(inputMessage);
     setInputMessage('');
     setIsLoading(true);
 
-    // Ako je zahtev za skidanje pozadine → obradi odmah preko Ideogram endpointa
-    if (isRemoveBgRequest(currentUserMessage.content)) {
-      if (!attachedFile) {
-        setMessages(prev => [...prev, { id: `need_img_${Date.now()}`, role: 'assistant', content: 'Dodajte sliku pomoću ikone spajalice ispod, pa ponovo pošaljite: “skini pozadinu”.' }]);
+    // Ako je zahtev za promenu pozadine → obradi odmah preko Ideogram endpointa
+    if (wantsReplaceBg) {
+      if (!fileForThisMessage) {
+        setMessages(prev => [...prev, { id: `need_img_${Date.now()}`, role: 'assistant', content: 'Dodajte sliku pomoću ikone spajalice ispod, pa ponovo pošaljite: “zameni/promeni pozadinu”.' }]);
         setIsLoading(false);
         return;
       }
-      await handleRemoveBackground(attachedFile, currentUserMessage.content);
+      setMessages(prev => [...prev, { id: `rb_wait_${Date.now()}`, role: 'assistant', content: 'U redu, menjam pozadinu na fotografiji. Molimo sačekajte…' }]);
+      await handleRemoveBackground(fileForThisMessage, currentUserMessage.content);
       return;
     }
 
     try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: 'gpt-4o',
-                response_format: { type: "json_object" },
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    {
-                      role: 'user',
-                      content: `
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: `
                         Korisnikov zahtev: "${currentUserMessage.content}"
                         
                         Informacije o biznisu korisnika:
@@ -195,48 +378,47 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                         - Industrija: ${userBrain?.industry || 'Nije uneto'}
                         - Ciljevi: ${userBrain?.goals?.join(', ') || 'Nisu uneti'}
                       `
-                    }
-                ],
-            })
-        });
+            }
+          ]
+        })
+      });
 
-        const data = await response.json();
-        const aiMessageContent = data.choices[0].message.content;
-        console.log("Full AI Response:", aiMessageContent);
+      const data = await response.json();
+      const aiMessageContent = data.choices[0].message.content;
+      console.log('Full AI Response:', aiMessageContent);
 
-        try {
-          const parsedResponse = JSON.parse(aiMessageContent);
-          
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: 'U redu, pripremam vašu objavu. Generisanje slike može potrajati 15-20 sekundi...'
-          }]);
-          
-          const promptForImage = parsedResponse.notes || currentUserMessage.content;
-          const detectedSize = detectSizeFromText(currentUserMessage.content);
+      try {
+        const parsedResponse = JSON.parse(aiMessageContent);
 
-          await handleImageGeneration(
-            promptForImage,
-            detectedSize,
-            parsedResponse
-          );
-
-        } catch (e) {
-          console.error("Failed to parse AI response as JSON or generate image:", e);
-          const newAssistantMessage: Message = { id: Date.now().toString() + 'a', role: 'assistant', content: "Došlo je do greške pri obradi odgovora. Molim vas pokušajte ponovo." };
-          setMessages(prev => [...prev, newAssistantMessage]);
-        }
-    } catch (error) {
-        console.error("Error sending message:", error);
-         const errorMessage: Message = {
-          id: 'error',
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
           role: 'assistant',
-          content: 'Došlo je do greške prilikom komunikacije sa AI asistentom. Proverite konzolu za detalje.'
-        };
-        setMessages(prev => [...prev, errorMessage]);
+          content: 'U redu, pripremam vašu objavu. Generisanje slike može potrajati 15-20 sekundi...'
+        }]);
+
+        const promptForImage = parsedResponse.notes || currentUserMessage.content;
+        const detectedSize = detectSizeFromText(currentUserMessage.content);
+
+        await handleImageGeneration(
+          promptForImage,
+          detectedSize,
+          parsedResponse
+        );
+      } catch (e) {
+        console.error('Failed to parse AI response as JSON or generate image:', e);
+        const newAssistantMessage: Message = { id: Date.now().toString() + 'a', role: 'assistant', content: 'Došlo je do greške pri obradi odgovora. Molim vas pokušajte ponovo.' };
+        setMessages(prev => [...prev, newAssistantMessage]);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage: Message = {
+        id: 'error',
+        role: 'assistant',
+        content: 'Došlo je do greške prilikom komunikacije sa AI asistentom. Proverite konzolu za detalje.'
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -262,18 +444,18 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
             <div className="px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20 text-xs text-green-400 font-semibold flex items-center space-x-1.5 shadow-[0_0_10px_rgba(52,211,153,0.5)]">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               <span>ONLINE</span>
-            </div>
           </div>
+        </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
             {messages.map((msg) => (
               <div key={msg.id} className={`flex items-start gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {msg.role === 'assistant' && <img src={logoSrc} alt="AI" className="w-9 h-9 rounded-full shadow-lg" />}
                 <div className={`max-w-[85%] rounded-2xl px-5 py-3.5 shadow-xl transition-all duration-300 ${msg.role === 'user' ? 'bg-gradient-to-br from-[#F56E36] to-[#d15a2c] rounded-br-none' : 'bg-white/5 border border-white/10 rounded-bl-none'}`}>
-                  {msg.type === 'remove_bg_result' && msg.imageUrl ? (
+                  {(msg.type === 'replace_bg_result' || msg.type === 'remove_bg_result') && msg.imageUrl ? (
                     <div className="space-y-3">
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                      <img src={msg.imageUrl} alt="Bez pozadine" className="w-full max-h-72 object-contain rounded-lg border border-white/10" />
+                      <img src={msg.imageUrl} alt="Nova pozadina" className="w-full max-h-72 object-contain rounded-lg border border-white/10" />
                       <div className="flex gap-3">
                         <button
                           onClick={async () => {
@@ -283,7 +465,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                               const url = URL.createObjectURL(b);
                               const a = document.createElement('a');
                               a.href = url;
-                              a.download = `slika_bez_pozadine.png`;
+                              a.download = `slika_nova_pozadina.png`;
                               document.body.appendChild(a);
                               a.click();
                               document.body.removeChild(a);
@@ -297,17 +479,23 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                           Preuzmi PNG
                         </button>
                         <button
-                          onClick={() => {
-                            setSocialPost({
-                              title: 'Slika bez pozadine',
-                              caption: '',
-                              hashtags: [],
-                              imageUrl: msg.imageUrl!,
-                              size: '1024x1024',
-                              cta: '',
-                              notes: 'Korisnik uklonio pozadinu preko Ideogram-a',
-                            });
-                            setMessages(prev => [...prev, { id: `used_${Date.now()}`, role: 'assistant', content: 'U redu! Ubacio sam sliku bez pozadine u desni panel. Možete je dalje urediti.' }]);
+                          onClick={async () => {
+                            try {
+                              // Umesto automatskog captiona: prikaži sliku u desnom panelu i savete za unos
+                              setSocialPost({
+                                title: 'Objava',
+                                caption: 'Napišite opis objave ovde…',
+                                hashtags: [],
+                                imageUrl: msg.imageUrl!,
+                                size: '1024x1024',
+                                cta: 'Saznaj više',
+                                notes: 'Slika sa izmenjenom pozadinom – dodajte caption i heštegove ručno.'
+                              });
+                              setMessages(prev => [...prev, { id: `used_${Date.now()}`, role: 'assistant', content: 'Sliku sam ubacio u desni panel. Dodajte caption i heštegove po želji – polja su editabilna.' }]);
+                            } catch (e) {
+                              console.error('generate from image error', e);
+                              setMessages(prev => [...prev, { id: `gerr_${Date.now()}`, role: 'assistant', content: 'Nije uspelo pripremanje posta. Pokušajte ponovo.' }]);
+                            }
                           }}
                           className="px-4 py-2 bg-gradient-to-r from-[#F56E36] to-[#5a67d8] text-white rounded-lg font-semibold"
                         >
@@ -316,7 +504,21 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                       </div>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                    <div className="space-y-3">
+                      <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      {msg.role === 'user' && msg.imageUrl && (
+                        <div className="relative">
+                          <img src={msg.imageUrl} alt="Priložena slika" className="w-full max-h-72 object-contain rounded-lg border border-white/10" />
+                  <button
+                            onClick={() => removeImageFromMessage(msg.id)}
+                            className="absolute -top-2 -right-2 bg-black/70 hover:bg-black/90 text-white rounded-full p-1 shadow-lg"
+                            title="Ukloni sliku"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 8.586l4.95-4.95a1 1 0 111.415 1.415L11.415 10l4.95 4.95a1 1 0 01-1.415 1.415L10 11.415l-4.95 4.95a1 1 0 01-1.415-1.415L8.585 10l-4.95-4.95A1 1 0 115.05 3.636L10 8.586z" clipRule="evenodd"/></svg>
+                  </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -347,12 +549,24 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
                 rows={2}
               />
               {/* Attach image */}
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <label className="cursor-pointer text-white/70 hover:text-white" title="Dodaj sliku">
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => setAttachedFile(e.target.files?.[0] || null)} />
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828L18 9.828a4 4 0 00-5.657-5.657L5.05 11.464"/></svg>
+              {/* Floating add-image button above input */}
+              <div className="absolute -top-7 left-1 flex items-center gap-2">
+                <label className="cursor-pointer text-white/80 hover:text-white bg-white/10 border border-white/15 rounded-full px-3 py-1 text-xs shadow-lg backdrop-blur-sm" title="Dodaj sliku">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      setAttachedFile(f);
+                      if (f) setLastImageFile(f);
+                    }}
+                  />
+                  + Dodaj sliku
                 </label>
-                {attachedFile && <span className="text-xs text-white/60">{attachedFile.name}</span>}
+                {lastImageFile && (
+                  <span className="text-[11px] text-white/70 truncate max-w-[160px]">{lastImageFile.name}</span>
+                )}
               </div>
               <button onClick={handleSendMessage} disabled={isLoading} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white disabled:opacity-50">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14m-2-5l7 7-7 7" /></svg>

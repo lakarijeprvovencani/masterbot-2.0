@@ -17,6 +17,7 @@ const app = express();
 const fs = require('fs');
 const path = require('path');
 const port = process.env.PORT || 4001;
+const OPENAI_KEY = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
 
 // Node.js 18+ ima built-in fetch
 // const fetch = globalThis.fetch || require('node-fetch')
@@ -143,12 +144,27 @@ app.post('/api/generate-ideogram-image', async (req, res) => {
 app.get('/api/proxy-image', async (req, res) => {
   console.log('--- Primljen zahtev za proxy slike ---');
   try {
-    const imageUrl = req.query.url;
+    let imageUrl = req.query.url;
     console.log('URL slike za proxy:', imageUrl);
     if (!imageUrl || typeof imageUrl !== 'string') {
       return res.status(400).send('Image URL is required');
     }
 
+    // If local upload path, read from disk
+    if (typeof imageUrl === 'string' && imageUrl.startsWith('/api/uploads/')) {
+      const fileName = imageUrl.replace('/api/uploads/', '');
+      const filePath = require('path').join(uploadsDir, fileName);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).send('Local image not found');
+      }
+      const buffer = fs.readFileSync(filePath);
+      const ext = require('path').extname(filePath).toLowerCase();
+      const contentType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.png' ? 'image/png' : 'application/octet-stream';
+      const imageSrc = `data:${contentType};base64,${buffer.toString('base64')}`;
+      return res.json({ imageSrc });
+    }
+
+    // Otherwise fetch remote absolute URL
     const response = await fetch(imageUrl);
     if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -159,7 +175,7 @@ app.get('/api/proxy-image', async (req, res) => {
 
     const imageSrc = `data:${contentType};base64,${buffer.toString('base64')}`;
     
-    res.json({ imageSrc }); // Send as JSON object
+    res.json({ imageSrc });
 
   } catch (error) {
     console.error('Error proxying image:', error);
@@ -198,7 +214,17 @@ app.post('/api/ideogram/replace-background', upload.single('image'), async (req,
     if (!req.file) {
       return res.status(400).json({ error: 'Image file is required (field name: image)' });
     }
-    const prompt = req.body.prompt || 'transparent background, remove background';
+    // Normalize + translate prompts to English for Ideogram reliability
+    const rawPrompt = (req.body.prompt || '').toString();
+    let prompt = '';
+    try {
+      const translated = await translateBackgroundDescription(rawPrompt);
+      const normalized = normalizeBgPrompt(translated || rawPrompt);
+      prompt = normalized || translated;
+    } catch {}
+    if (!prompt) {
+      prompt = 'Replace the image background only. Keep the subject/foreground unchanged with clean edges. Background: pure white seamless studio background (#FFFFFF). No text.';
+    }
     const save = req.body.save === 'true' || req.body.save === true;
 
     const form = new FormData();
@@ -244,6 +270,9 @@ app.post('/api/ideogram/replace-background', upload.single('image'), async (req,
   }
 });
 
+// Ideogram: Remove background → vraća PNG sa transparentnom pozadinom
+// NOTE: remove-background endpoint uklanjamo (Ideogram nema stabilnu podršku), vraćamo se na replace-background
+
 /**
  * Funkcija za čišćenje HTML-a
  */
@@ -276,6 +305,99 @@ function cleanHTML(html) {
   text = text.split('\n').filter(line => line.trim().length > 0).join('\n')
   
   return text
+}
+
+// Normalize Serbian → English for background descriptions
+function normalizeBgPrompt(input) {
+  try {
+    if (!input) return '';
+    const norm = (s) => s
+      .toLowerCase()
+      .replace(/č/g, 'c').replace(/ć/g, 'c')
+      .replace(/š/g, 's').replace(/ž/g, 'z').replace(/đ/g, 'dj');
+    const t = norm(String(input));
+    const afterKeyword = (t.match(/pozadin[au]?\s*(.*)$/i) || [,''])[1] || t;
+    let raw = afterKeyword
+      .replace(/^(neka|neka\s*bude|da\s*bude|bude|stavi|postavi|napravi|na\s*ovoj\s*(slici|fotki|fotografiji)|sa\s*ove\s*(slike|fotke))\s*/i, '')
+      .replace(/^(promeni|zameni|izmeni|replace)\s*/i, '')
+      .replace(/^(u|za|na|sa|with|to|in)\s*/i, '')
+      .replace(/\s*na\s*ovoj\s*(slici|fotki|fotografiji).*$/i, '')
+      .trim();
+
+    let englishDesc = '';
+    if (/cisto\s*bela|bela|white/.test(raw)) englishDesc = 'pure white seamless studio background (#FFFFFF)';
+    else if (/crna|black/.test(raw)) englishDesc = 'pure black seamless studio background (#000000)';
+    else if (/zelena|green/.test(raw)) englishDesc = 'solid chroma green background (#00FF00)';
+    else if (/plava|blue/.test(raw)) englishDesc = 'solid blue studio background';
+    else if (/siva|sivo|grey|gray/.test(raw)) englishDesc = 'solid neutral grey studio background';
+    else if (/suma|sume|sumu|šuma|sumi|šumi|drvece|drveca|drvecu|drveća|drvecima|forest|woods/.test(raw)) englishDesc = 'dense forest background with many trees';
+    else if (/pustinja|pustinju|pustinjski|pesak|dine|dunes|desert/.test(raw)) englishDesc = 'desert sand dunes under clear sky';
+    else if (/sneg|snijeg|snow|winter/.test(raw)) englishDesc = 'snowy winter landscape';
+    else if (/svemir|kosmos|galaksija|galaksije|zvezde|zvijezde|nebula|cosmos|galaxy|space/.test(raw)) englishDesc = 'outer space background with stars and galaxies (deep navy/black)';
+    else if (/gradijent|gradient/.test(raw)) englishDesc = `soft gradient background (${raw})`;
+    else if (raw.length > 0) englishDesc = raw;
+    if (!englishDesc) englishDesc = 'pure white seamless studio background (#FFFFFF)';
+
+    const isPlain = /pure\s+white|pure\s+black|solid|gradient|plain|seamless/.test(englishDesc);
+    const parts = [
+      'Replace the image background only. Keep the subject/foreground unchanged with clean edges.',
+      `Background: ${englishDesc}.`,
+    ];
+    if (isPlain) {
+      parts.push('No scenery, no objects, no logos, no text. Plain, uniform background only.');
+    } else {
+      parts.push('No logos, no text.');
+    }
+    return parts.join(' ');
+  } catch (e) {
+    return '';
+  }
+}
+
+// Translate arbitrary user text to short English background description
+async function translateBackgroundDescription(text) {
+  try {
+    if (!text || !OPENAI_KEY) return '';
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0.1,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'You extract ONLY the desired BACKGROUND description from a casual user sentence (often Serbian).',
+              'Return a concise English noun-phrase (3-10 words).',
+              'Describe only the new background (environment/color/style).',
+              'Do NOT mention the subject/person. Do NOT add actions. Do NOT add logos or text.',
+              'Output the phrase only, no punctuation, no extra words.'
+            ].join(' ')
+          },
+          { role: 'user', content: 'zameni pozadinu u sneg' },
+          { role: 'assistant', content: 'snowy winter landscape' },
+          { role: 'user', content: 'promeni pozadinu za pustinju' },
+          { role: 'assistant', content: 'desert sand dunes' },
+          { role: 'user', content: 'zameni pozadinu neka bude cisto bela' },
+          { role: 'assistant', content: 'pure white seamless studio background' },
+          { role: 'user', content: 'promeni pozadinu u svemir sa zvezdama i galaksijama' },
+          { role: 'assistant', content: 'outer space with stars and galaxies' },
+          { role: 'user', content: 'promeni pozadinu u livadu sa travom' },
+          { role: 'assistant', content: 'green meadow grass field' },
+          { role: 'user', content: String(text) }
+        ]
+      })
+    });
+    const data = await resp.json();
+    const out = data?.choices?.[0]?.message?.content || '';
+    return out.trim();
+  } catch (e) {
+    return '';
+  }
 }
 
 // Health check endpoint

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ImageEditor from './ImageEditor';
 
 export interface SocialPost {
@@ -18,6 +18,16 @@ interface SocialPostPanelProps {
 
 const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
   const [isEditing, setIsEditing] = useState(false);
+  // Lokalna, kontrolisana polja – resetuju se kada stigne nov "post"
+  const [captionValue, setCaptionValue] = useState(post.caption);
+  const [hashtagsText, setHashtagsText] = useState(post.hashtags.join(' '));
+  const [ctaValue, setCtaValue] = useState(post.cta);
+
+  useEffect(() => {
+    setCaptionValue(post.caption);
+    setHashtagsText(post.hashtags.join(' '));
+    setCtaValue(post.cta);
+  }, [post.imageUrl, post.title]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -74,9 +84,12 @@ const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
     <div className="bg-editor-gradient border border-white/10 rounded-2xl shadow-2xl p-6 flex flex-col h-full max-h-[90vh] animate-fade-in-up">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-white bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">{post.title}</h2>
-        <button onClick={onClose} className="text-white/50 hover:text-white transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleCopy(`${captionValue}\n\n${hashtagsText}\n${ctaValue}`)} className="px-3 py-1.5 text-xs rounded-lg bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/15">Kopiraj sve</button>
+          <button onClick={onClose} className="text-white/60 hover:text-white"> 
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
       </div>
 
       {/* Main content area */}
@@ -100,33 +113,46 @@ const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
         {/* Right: Content */}
         <div className="flex flex-col h-full">
           <div className="flex-1 flex flex-col space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-            <div>
-              <label className="text-sm font-medium text-white/80 mb-2 block">Caption</label>
-              <div className="relative">
-                <textarea
-                  value={post.caption}
-                  readOnly
-                  className="w-full h-40 bg-black/20 border border-white/15 rounded-xl p-3 text-white/90 resize-none"
-                />
-                <button onClick={() => handleCopy(post.caption)} className="absolute top-2 right-2 text-white/50 hover:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                </button>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-white/80">Caption</label>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleCopy(post.caption)} className="px-2 py-1 text-[11px] rounded-md bg-white/10 border border-white/15 text-white/70 hover:text-white">Copy</button>
+                  <span className="text-white/30 text-[11px]">autosave</span>
+                </div>
               </div>
+              <textarea
+                value={captionValue}
+                onChange={(e) => setCaptionValue(e.target.value)}
+                onBlur={() => (post.caption = captionValue)}
+                className="w-full h-40 bg-black/30 border border-white/10 rounded-lg p-3 text-white/90 resize-none focus:outline-none focus:ring-2 focus:ring-[#F56E36]/60"
+              />
             </div>
-            <div>
-              <label className="text-sm font-medium text-white/80 mb-2 block">Hashtags</label>
-              <div className="relative">
-                  <div className="p-3 bg-black/20 border border-white/15 rounded-xl text-white/90">
-                      {post.hashtags.join(' ')}
-                  </div>
-                <button onClick={() => handleCopy(post.hashtags.join(' '))} className="absolute top-2 right-2 text-white/50 hover:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                </button>
+
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-white/80">Hashtags</label>
+                <button onClick={() => handleCopy(hashtagsText)} className="px-2 py-1 text-[11px] rounded-md bg-white/10 border border-white/15 text-white/70 hover:text-white">Copy</button>
               </div>
+              <textarea
+                value={hashtagsText}
+                onChange={(e) => setHashtagsText(e.target.value)}
+                onBlur={() => (post.hashtags = hashtagsText.split(/\s+/).filter(Boolean))}
+                className="w-full h-24 bg-black/30 border border-white/10 rounded-lg p-3 text-white/90 resize-none focus:outline-none focus:ring-2 focus:ring-[#F56E36]/60"
+              />
             </div>
-             <div>
-              <label className="text-sm font-medium text-white/80 mb-2 block">Call to Action</label>
-              <p className="p-3 bg-black/20 border border-white/15 rounded-xl text-white/90">{post.cta}</p>
+
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-white/80">Call to Action</label>
+                <span className="text-white/30 text-[11px]">autosave</span>
+              </div>
+              <input
+                value={ctaValue}
+                onChange={(e) => setCtaValue(e.target.value)}
+                onBlur={() => (post.cta = ctaValue)}
+                className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white/90 focus:outline-none focus:ring-2 focus:ring-[#F56E36]/60"
+              />
             </div>
           </div>
           <div className="space-y-3 pt-2">
