@@ -505,21 +505,22 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
           <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
             {/* Istorija - modal */}
             {isHistoryOpen && (
-              <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                <div className="bg-editor-gradient w-[720px] max-w-[90vw] max-h-[80vh] rounded-2xl border border-white/10 shadow-2xl p-5 overflow-hidden">
+              <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-editor-gradient w-[92vw] h-[86vh] rounded-2xl border border-white/10 shadow-2xl p-6 overflow-hidden">
                   <div className="flex justify-between items-center mb-3">
                     <h3 className="text-lg font-semibold text-white">Istorija (poslednjih 7 dana)</h3>
                     <button onClick={() => setIsHistoryOpen(false)} className="text-white/70 hover:text-white">Zatvori</button>
                   </div>
-                  <div className="overflow-auto pr-1 max-h-[65vh] grid grid-cols-1 gap-3">
+                  <div className="overflow-auto pr-1 h-[74vh] grid grid-cols-3 gap-4">
                     {historyItems.map((it) => (
-                      <div key={it.id} className="flex items-center gap-3 p-2 bg-black/20 rounded-lg border border-white/10">
-                        <img src={it.image_url} className="w-16 h-16 object-cover rounded" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-white/90 truncate">{it.title || (it.type === 'bg_replace' ? 'Zamenjena pozadina' : 'Generisana objava')}</div>
-                          <div className="text-[11px] text-white/50">{new Date(it.created_at).toLocaleString()}</div>
+                      <div key={it.id} className="p-3 bg-black/20 rounded-xl border border-white/10 hover:bg-black/25 transition-colors">
+                        <img src={it.image_url} className="w-full aspect-square object-cover rounded-lg mb-2" />
+                        <div className="text-white/90 text-sm truncate mb-1">{it.title || (it.type === 'bg_replace' ? 'Zamenjena pozadina' : 'Generisana objava')}</div>
+                        <div className="text-[11px] text-white/50 mb-2">{new Date(it.created_at).toLocaleString()}</div>
+                        <div className="flex gap-2">
+                          <button onClick={() => { setSocialPost({ title: it.title || 'Objava', caption: it.caption || '', hashtags: it.hashtags || [], imageUrl: it.image_url, size: it.size || '1024x1024', cta: it.cta || 'Saznaj više' }); setIsHistoryOpen(false); }} className="flex-1 text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Otvori</button>
+                          <a href={it.image_url} target="_blank" className="text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Slika</a>
                         </div>
-                        <button onClick={() => { setSocialPost({ title: it.title || 'Objava', caption: it.caption || '', hashtags: it.hashtags || [], imageUrl: it.image_url, size: it.size || '1024x1024', cta: it.cta || 'Saznaj više' }); setIsHistoryOpen(false); }} className="text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Otvori</button>
                       </div>
                     ))}
                     {historyItems.length === 0 && (
@@ -662,7 +663,35 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
           <div className="absolute inset-0 bg-hero-gradient opacity-40 z-0"></div>
            <div className="relative w-full h-full z-10 flex items-center justify-center">
             {socialPost ? (
-              <SocialPostPanel post={socialPost} onClose={() => setSocialPost(null)} />
+              <SocialPostPanel
+                post={socialPost}
+                onClose={() => setSocialPost(null)}
+                onAutosave={async (patch) => {
+                  try {
+                    setSocialPost(prev => prev ? { ...prev, ...patch } : prev);
+                    if (!profile?.id) return;
+                    // Ako imamo historyId (u budućnosti), možemo update; za sada probaj da pronađe poslednji unos sa istim image_url
+                    const { data } = await supabase
+                      .from('post_history')
+                      .select('id')
+                      .eq('user_id', profile.id)
+                      .eq('image_url', socialPost?.imageUrl || '')
+                      .order('created_at', { ascending: false })
+                      .limit(1);
+                    const recId = data && data[0]?.id;
+                    if (recId) {
+                      await supabase.from('post_history').update({
+                        caption: patch.caption ?? undefined,
+                        hashtags: patch.hashtags ?? undefined,
+                        cta: patch.cta ?? undefined,
+                        title: patch.title ?? undefined,
+                      }).eq('id', recId);
+                    }
+                  } catch (e) {
+                    console.warn('autosave history failed', e);
+                  }
+                }}
+              />
             ) : (
               <img src={mascotImage} alt="Masterbot Mascot" className="max-w-lg w-full animate-fade-in-up" />
             )}

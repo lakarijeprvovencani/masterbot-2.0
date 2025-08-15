@@ -9,14 +9,16 @@ export interface SocialPost {
   size: '1024x1024' | '1024x1792' | '1792x1024';
   cta: string;
   notes?: string;
+  historyId?: string;
 }
 
 interface SocialPostPanelProps {
   post: SocialPost;
   onClose: () => void;
+  onAutosave?: (patch: Partial<SocialPost>) => void;
 }
 
-const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
+const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose, onAutosave }) => {
   const [isEditing, setIsEditing] = useState(false);
   // Lokalna, kontrolisana polja – resetuju se kada stigne nov "post"
   const [captionValue, setCaptionValue] = useState(post.caption);
@@ -124,7 +126,7 @@ const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
               <textarea
                 value={captionValue}
                 onChange={(e) => setCaptionValue(e.target.value)}
-                onBlur={() => (post.caption = captionValue)}
+                onBlur={() => { post.caption = captionValue; onAutosave && onAutosave({ caption: captionValue }); }}
                 className="w-full h-40 bg-black/30 border border-white/10 rounded-lg p-3 text-white/90 resize-none focus:outline-none focus:ring-2 focus:ring-[#F56E36]/60"
               />
             </div>
@@ -137,7 +139,7 @@ const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
               <textarea
                 value={hashtagsText}
                 onChange={(e) => setHashtagsText(e.target.value)}
-                onBlur={() => (post.hashtags = hashtagsText.split(/\s+/).filter(Boolean))}
+                onBlur={() => { post.hashtags = hashtagsText.split(/\s+/).filter(Boolean); onAutosave && onAutosave({ hashtags: post.hashtags }); }}
                 className="w-full h-24 bg-black/30 border border-white/10 rounded-lg p-3 text-white/90 resize-none focus:outline-none focus:ring-2 focus:ring-[#F56E36]/60"
               />
             </div>
@@ -150,7 +152,7 @@ const SocialPostPanel: React.FC<SocialPostPanelProps> = ({ post, onClose }) => {
               <input
                 value={ctaValue}
                 onChange={(e) => setCtaValue(e.target.value)}
-                onBlur={() => (post.cta = ctaValue)}
+                onBlur={() => { post.cta = ctaValue; onAutosave && onAutosave({ cta: ctaValue }); }}
                 className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white/90 focus:outline-none focus:ring-2 focus:ring-[#F56E36]/60"
               />
             </div>
