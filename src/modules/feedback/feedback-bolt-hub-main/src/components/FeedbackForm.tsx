@@ -22,9 +22,7 @@ const FeedbackForm = ({
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<FeedbackCategory | ''>('');
   const [loading, setLoading] = useState(false);
-  const {
-    user
-  } = useAuth();
+  const { user } = useAuth();
   const {
     toast
   } = useToast();
@@ -32,7 +30,11 @@ const FeedbackForm = ({
   const categories: FeedbackCategory[] = ['Zahtev za alat', 'Funkcionalnost', 'Bug', 'Generalni utisak'];
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !category) return;
+    if (!user) {
+      // U embed modu, ako korisnik nije prijavljen u glavnoj app, onemogući slanje
+      return;
+    }
+    if (!category) return;
     setLoading(true);
     try {
       const {

@@ -137,7 +137,7 @@ const Dashboard = () => {
     return counts;
   };
 
-  if (!user) return null;
+  // U embedded modu dozvoli prikaz i bez lokalne supabase sesije (čitanje je javno; dodavanje ograniceno)
   return (
     <div className="min-h-screen gradient-primary">
       <Header />
@@ -176,7 +176,7 @@ const Dashboard = () => {
                         <Menu className="h-4 w-4 mr-2" />
                         Kategorije
                       </Button>
-                      <FeedbackForm onFeedbackCreated={fetchFeedbacks} />
+                      {user && <FeedbackForm onFeedbackCreated={fetchFeedbacks} />}
                     </div>
                   )}
                   <div className="hidden md:block mobile-hero-content backdrop-blur-sm bg-white/5 rounded-xl p-4 md:p-0 md:bg-transparent md:backdrop-blur-none">
@@ -187,7 +187,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="hidden md:flex justify-center md:justify-end md:ml-4">
-                  <FeedbackForm onFeedbackCreated={fetchFeedbacks} />
+                  {user && <FeedbackForm onFeedbackCreated={fetchFeedbacks} />}
                 </div>
               </div>
 

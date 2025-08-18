@@ -15,7 +15,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        {/* Embedded mode: render Dashboard bez dodatne autentikacije */}
+        {/* Embedded mode: render Dashboard bez interne autentikacije */}
         <BrowserRouter>
           <Dashboard />
         </BrowserRouter>
