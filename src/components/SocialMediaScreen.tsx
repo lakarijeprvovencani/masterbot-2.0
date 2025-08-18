@@ -16,7 +16,7 @@ interface Message {
 }
 
 const SocialMediaScreen: React.FC = () => {
-  const { profile, userBrain, loading: authLoading } = useAuth();
+  const { user, profile, userBrain, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -24,10 +24,84 @@ const SocialMediaScreen: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [lastImageFile, setLastImageFile] = useState<File | null>(null);
-  const [isGeneratingFromImage, setIsGeneratingFromImage] = useState(false);
-  const [lastBgIntentText, setLastBgIntentText] = useState<string>('');
+  // const [isGeneratingFromImage, setIsGeneratingFromImage] = useState(false);
+  // const [lastBgIntentText, setLastBgIntentText] = useState<string>('');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState<any[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  // Local cache helpers
+  const LOCAL_LAST_KEY = 'sm_last_session_id';
+  const sessionCacheKey = (id: string) => `sm_session_${id}`;
+
+  const cacheMessagesLocal = (id: string, msgs: Message[]) => {
+    try {
+      const payload = { updatedAt: Date.now(), messages: msgs };
+      localStorage.setItem(sessionCacheKey(id), JSON.stringify(payload));
+      localStorage.setItem(LOCAL_LAST_KEY, id);
+    } catch {}
+  };
+
+  const readMessagesLocal = (id: string): Message[] | null => {
+    try {
+      const raw = localStorage.getItem(sessionCacheKey(id));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.messages)) return parsed.messages as Message[];
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const getFirstName = (): string => {
+    const fromProfile = profile?.full_name?.trim() || '';
+    const fromUserMeta = (user as any)?.user_metadata?.full_name?.trim() || '';
+    const source = fromProfile || fromUserMeta || profile?.email?.split('@')[0] || '';
+    const first = source.split(' ')[0]?.trim();
+    return first && first.length > 0 ? first : 'kolega';
+  };
+
+  const persistMessageDb = async (msg: Message) => {
+    try {
+      if (!sessionId || !profile?.id) return;
+      if (sessionId.startsWith('local_')) return; // skip DB when using local-only session
+      await supabase.from('chat_messages').insert({
+        session_id: sessionId,
+        user_id: profile.id,
+        role: msg.role,
+        content: msg.content ?? null,
+        type: msg.type ?? null,
+        image_url: msg.imageUrl ?? null,
+        saved_url: (msg as any).savedUrl ?? null,
+      });
+    } catch (e) {
+      console.warn('persistMessageDb failed', e);
+    }
+  };
+
+  const isGreeting = (m: Message) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('Masterbot Social Media Asistent');
+
+  const dedupeGreetings = (list: Message[]): Message[] => {
+    let seen = false;
+    return list.filter(m => {
+      if (isGreeting(m)) {
+        if (seen) return false;
+        seen = true;
+      }
+      return true;
+    });
+  };
+
+  const pushMessage = (msg: Message, opts?: { persist?: boolean }) => {
+    setMessages(prev => {
+      if (isGreeting(msg) && prev.some(isGreeting)) return prev;
+      const next = dedupeGreetings([...prev, msg]);
+      if (sessionId) cacheMessagesLocal(sessionId, next);
+      return next;
+    });
+    if (opts?.persist !== false) persistMessageDb(msg);
+  };
 
   // Sačuvaj stavku u istoriju (Supabase)
   const saveHistory = async (item: {
@@ -77,18 +151,169 @@ const SocialMediaScreen: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!authLoading && profile) {
+  // Restartuj chat: obriši poruke iz tekuće sesije i prikaži novi pozdrav
+  const restartChat = async () => {
+    try {
+      if (!sessionId || !profile?.id) return;
+      const confirmed = window.confirm('Da li ste sigurni da želite da restartujete chat? Svi prethodni mesidži biće obrisani.');
+      if (!confirmed) return;
+
+      // Obriši poruke iz baze (ako nije lokalna sesija)
+      if (!sessionId.startsWith('local_')) {
+        await supabase.from('chat_messages').delete().eq('session_id', sessionId);
+      }
+
+      // Očisti localStorage keš za ovu sesiju
+      localStorage.removeItem(sessionCacheKey(sessionId));
+
+      // Resetuj state i dodaj pozdrav
+      setMessages([]);
       const firstName = profile.full_name?.split(' ')[0] || 'kolega';
-      setMessages([
-        {
-          id: 'initial',
+      const greet: Message = {
+        id: `greet_${Date.now()}`,
+        role: 'assistant',
+        content: `Zdravo ${firstName}! 👋 Ja sam tvoj Masterbot Social Media Asistent. Spreman sam da ti pomognem da kreiraš objave koje će tvoji pratioci obožavati. Šta danas pravimo?`
+      };
+      pushMessage(greet);
+    } catch (e) {
+      console.warn('restartChat failed', e);
+    }
+  };
+
+  // Initialize or restore session + messages
+  useEffect(() => {
+    const init = async () => {
+      if (authLoading || !profile?.id) return;
+      try {
+        // Try last session from localStorage
+        const last = localStorage.getItem(LOCAL_LAST_KEY);
+        if (last) {
+          setSessionId(last);
+          const cached = readMessagesLocal(last);
+          if (cached && cached.length) setMessages(cached.filter((m, i, arr) => {
+            // drop duplicate greetings and duplicate ids (like legacy 'initial')
+            const firstIndexSameId = arr.findIndex(x => x.id === m.id);
+            const isDupId = firstIndexSameId !== i;
+            const isGreet = m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('Masterbot Social Media Asistent');
+            if (isDupId) return false;
+            if (isGreet) {
+              const firstGreetIdx = arr.findIndex(x => x.role === 'assistant' && typeof x.content === 'string' && x.content.includes('Masterbot Social Media Asistent'));
+              return firstGreetIdx === i;
+            }
+            return true;
+          }));
+          // Load from DB and replace (source of truth)
+          const { data: rows, error } = await supabase
+            .from('chat_messages')
+            .select('*')
+            .eq('session_id', last)
+            .order('created_at', { ascending: true });
+          if (!error && Array.isArray(rows)) {
+            const loaded: Message[] = rows.map((r: any) => ({
+              id: r.id,
+              role: r.role,
+              content: r.content || '',
+              type: r.type || undefined,
+              imageUrl: r.image_url || undefined,
+              savedUrl: r.saved_url || undefined,
+            }));
+            if (loaded.length) {
+              const deduped = loaded.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i);
+              setMessages(deduped);
+              cacheMessagesLocal(last, loaded);
+              return;
+            }
+          }
+          // If no DB messages, show greeting
+          if (!cached || !cached.length) {
+            const firstName = getFirstName();
+            const greet: Message = {
+              id: `greet_${Date.now()}`,
+              role: 'assistant',
+              content: `Zdravo ${firstName}! 👋 Ja sam tvoj Masterbot Social Media Asistent. Spreman sam da ti pomognem da kreiraš objave koje će tvoji pratioci obožavati. Šta danas pravimo?`
+            };
+            pushMessage(greet);
+          }
+          return;
+        }
+
+        // Try last session from DB (cross-device continuity)
+        const { data: lastSess, error: sessErr } = await supabase
+          .from('chat_sessions')
+          .select('id')
+          .eq('user_id', profile.id)
+          .order('last_message_at', { ascending: false })
+          .limit(1);
+        if (!sessErr && Array.isArray(lastSess) && lastSess[0]?.id) {
+          const sid = lastSess[0].id as string;
+          setSessionId(sid);
+          localStorage.setItem(LOCAL_LAST_KEY, sid);
+          const { data: rows2 } = await supabase
+            .from('chat_messages')
+            .select('*')
+            .eq('session_id', sid)
+            .order('created_at', { ascending: true });
+          const loaded2: Message[] = (rows2 || []).map((r: any) => ({
+            id: r.id,
+            role: r.role,
+            content: r.content || '',
+            type: r.type || undefined,
+            imageUrl: r.image_url || undefined,
+            savedUrl: r.saved_url || undefined,
+          }));
+          if (loaded2.length) {
+            const deduped2 = loaded2.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i);
+            setMessages(deduped2);
+            cacheMessagesLocal(sid, loaded2);
+            return;
+          }
+        }
+
+        // Create new session
+        const { data: created, error: createErr } = await supabase
+          .from('chat_sessions')
+          .insert({ user_id: profile.id, title: 'Social Media', status: 'active' })
+          .select('id')
+          .single();
+        if (createErr) throw createErr;
+        const newId = created.id as string;
+        setSessionId(newId);
+        localStorage.setItem(LOCAL_LAST_KEY, newId);
+        const firstName = getFirstName();
+        const greet: Message = {
+          id: `greet_${Date.now()}`,
           role: 'assistant',
           content: `Zdravo ${firstName}! 👋 Ja sam tvoj Masterbot Social Media Asistent. Spreman sam da ti pomognem da kreiraš objave koje će tvoji pratioci obožavati. Šta danas pravimo?`
+        };
+        pushMessage(greet);
+      } catch (e) {
+        console.warn('init session failed', e);
+        // Fallback: local-only session
+        const localId = `local_${profile.id}_${Date.now()}`;
+        setSessionId(localId);
+        localStorage.setItem(LOCAL_LAST_KEY, localId);
+        const cached = readMessagesLocal(localId);
+        if (cached && cached.length) {
+          const dedupLocal = cached.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i);
+          setMessages(dedupLocal);
+        } else {
+          const firstName = getFirstName();
+          const greet: Message = {
+            id: `greet_${Date.now()}`,
+            role: 'assistant',
+            content: `Zdravo ${firstName}! 👋 Ja sam tvoj Masterbot Social Media Asistent. Spreman sam da ti pomognem da kreiraš objave koje će tvoji pratioci obožavati. Šta danas pravimo?`
+          };
+          pushMessage(greet, { persist: false });
         }
-      ]);
-    }
-  }, [authLoading, profile]);
+      }
+    };
+    init();
+  }, [authLoading, profile?.id]);
+
+  // Keep local cache fresh
+  useEffect(() => {
+    if (sessionId) cacheMessagesLocal(sessionId, messages);
+  }, [messages, sessionId]);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(scrollToBottom, [messages]);
@@ -141,6 +366,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
   };
 
   // Izvuci sirov opis nove pozadine iza konektora (u/za/na/sa...) – bez prevođenja, to radi backend
+  /*
   const extractBackgroundPrompt = (text: string): string => {
     if (!text) return '';
     const t = text
@@ -154,6 +380,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
     }
     return t;
   };
+  */
 
   // Ukloni sliku iz određene korisničke poruke (bez brisanja teksta)
   const removeImageFromMessage = (id: string) => {
@@ -161,76 +388,35 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
   };
 
   // Ekstrahuj ključne tematske reči iz konteksta (svemir/pustinja/sneg/šuma/plaža...)
-  const extractThemeKeywords = (text: string): string[] => {
-    const t = (text || '').toLowerCase();
-    const kws: string[] = [];
-    if (/(svemir|kosmos|galaks|zvezd)/.test(t)) kws.push('svemir', 'galaksija', 'zvezde');
-    if (/(pustin|pesak|dine|desert)/.test(t)) kws.push('pustinja', 'pesak', 'dine');
-    if (/(sneg|zima|winter)/.test(t)) kws.push('sneg', 'zimski ambijent');
-    if (/(šuma|suma|drve|forest|woods)/.test(t)) kws.push('šuma', 'drveće');
-    if (/(more|plaža|plaza|ocean|beach)/.test(t)) kws.push('plaža', 'more', 'talasi');
-    if (/(grad|ulica|city|urban)/.test(t)) kws.push('grad', 'urbani ambijent');
-    return Array.from(new Set(kws));
-  };
+  // const extractThemeKeywords = (text: string): string[] => {
+  //   const t = (text || '').toLowerCase();
+  //   const kws: string[] = [];
+  //   if (/(svemir|kosmos|galaks|zvezd)/.test(t)) kws.push('svemir', 'galaksija', 'zvezde');
+  //   if (/(pustin|pesak|dine|desert)/.test(t)) kws.push('pustinja', 'pesak', 'dine');
+  //   if (/(sneg|zima|winter)/.test(t)) kws.push('sneg', 'zimski ambijent');
+  //   if (/(šuma|suma|drve|forest|woods)/.test(t)) kws.push('šuma', 'drveće');
+  //   if (/(more|plaža|plaza|ocean|beach)/.test(t)) kws.push('plaža', 'more', 'talasi');
+  //   if (/(grad|ulica|city|urban)/.test(t)) kws.push('grad', 'urbani ambijent');
+  //   return Array.from(new Set(kws));
+  // };
 
   // Vraća few-shot JSON primer na osnovu teme da izbegnemo generičke fraze
-  const buildThemeFewShot = (themes: string[]) => {
-    if (themes.includes('pustinja')) {
-      return {
-        user: 'Primer: Pustinja/dine',
-        assistant: {
-          title: 'Dah pustinje',
-          caption: 'Zlatne dine i topao vetar stvaraju minimalizam koji privlači pogled. Kontrasti peska i senki daju moćnu eleganciju.',
-          hashtags: ['#pustinja', '#dine', '#pesak', '#minimalizam', '#sunce', '#toplina', '#negativanprostor'],
-          cta: 'Saznaj više',
-          notes: 'Tema: pustinja, dine, zlatni tonovi'
-        }
-      };
-    }
-    if (themes.includes('svemir')) {
-      return {
-        user: 'Primer: Svemir/galaksija',
-        assistant: {
-          title: 'Galaktički sjaj',
-          caption: 'Zvezdana prašina i spirale galaksije oblikuju futurističku energiju vizuala. Osećaj beskraja daje snažan akcenat brendu.',
-          hashtags: ['#svemir', '#galaksija', '#zvezde', '#futurizam', '#mistika', '#noćneneon'],
-          cta: 'Saznaj više',
-          notes: 'Tema: svemir, galaksije'
-        }
-      };
-    }
-    if (themes.includes('sneg')) {
-      return {
-        user: 'Primer: Sneg/zima',
-        assistant: {
-          title: 'Zimski mir',
-          caption: 'Mraz i meko svetlo prave kristalnu atmosferu. Tišina snega pojačava fokus na proizvod i poruku.',
-          hashtags: ['#zima', '#sneg', '#mraz', '#tišina', '#minimalno', '#hladniTonovi'],
-          cta: 'Saznaj više',
-          notes: 'Tema: sneg, zimski ambijent'
-        }
-      };
-    }
-    if (themes.includes('šuma')) {
-      return {
-        user: 'Primer: Šuma/drveće',
-        assistant: {
-          title: 'Smaragdna tišina',
-          caption: 'Zelene krošnje i difuzno svetlo stvaraju prirodan luksuz. Tekst istaknite na prozračnim tamnim površinama.',
-          hashtags: ['#šuma', '#priroda', '#drveće', '#svetlost', '#smaragdno', '#eko'],
-          cta: 'Saznaj više',
-          notes: 'Tema: šuma, priroda'
-        }
-      };
-    }
-    return null;
-  };
+  // const buildThemeFewShot = (themes: string[]) => {
+  //   if (themes.includes('pustinja')) {
+  //     return { user: 'Primer: Pustinja/dine', assistant: { title: 'Dah pustinje', caption: '...', hashtags: ['#pustinja'], cta: 'Saznaj više', notes: 'Tema: pustinja' } };
+  //   }
+  //   if (themes.includes('svemir')) {
+  //     return { user: 'Primer: Svemir/galaksija', assistant: { title: 'Galaktički sjaj', caption: '...', hashtags: ['#svemir'], cta: 'Saznaj više', notes: 'Tema: svemir' } };
+  //   }
+  //   return null;
+  // };
 
   // Generiši sadržaj objave analizom slike (GPT-4o, srpski izlaz)
+  /*
   const generatePostFromImage = async (imageUrl: string, contextText: string = ''): Promise<SocialPost> => {
-    const brandTone = userBrain?.brand_tone || 'samouvereno, moderno';
+    const brandTone = (userBrain as any)?.brand_tone || 'samouvereno, moderno';
     const brandColors = Array.isArray((userBrain as any)?.brand_colors) ? (userBrain as any).brand_colors : ['#040A3E', '#F56E36'];
-    const audience = userBrain?.target_audience || 'opšta publika';
+    const audience = (userBrain as any)?.target_audience || 'opšta publika';
     const sys = 'Ti si ekspert za društvene mreže. Odgovaraj isključivo na srpskom i striktno u JSON formatu.';
     const themes = extractThemeKeywords(contextText);
     const banned = 'NE KORISTI generičke fraze u captionu tipa: "Podeli priču sa pratiocima", "Pogledaj novi vizual", "Uživaj u...". Budi konkretan i tematski.';
@@ -291,6 +477,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
     };
     return post;
   };
+  */
 
   const handleRemoveBackground = async (file: File, userPrompt: string) => {
     try {
@@ -318,12 +505,12 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
         imageUrl: previewUrl,
         savedUrl: previewUrl,
       };
-      setMessages(prev => [...prev, msg]);
+      pushMessage(msg);
       setLastImageFile(file);
-      setLastBgIntentText(userPrompt);
+      // context text preserved implicitly in messages
     } catch (e) {
       console.error('replace background error:', e);
-      setMessages(prev => [...prev, { id: `rb_err_${Date.now()}`, role: 'assistant', content: 'Nije uspela promena pozadine. Pokušajte ponovo.' }]);
+      pushMessage({ id: `rb_err_${Date.now()}`, role: 'assistant', content: 'Nije uspela promena pozadine. Pokušajte ponovo.' });
     } finally {
       setAttachedFile(null);
       setIsLoading(false);
@@ -362,7 +549,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
         role: 'assistant',
         content: 'Vaš vizual (bez teksta) i predlozi za objavu su spremni! Pregledajte ih sa desne strane. Ako želite tekst na slici, kliknite “Uredi Sliku” i dodajte ga kroz editor.'
       };
-      setMessages(prev => [...prev, newAssistantMessage]);
+      pushMessage(newAssistantMessage);
 
     } catch (error) {
       console.error("Error generating social post:", error);
@@ -371,7 +558,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
         role: 'assistant',
         content: 'Došlo je do greške prilikom generisanja objave. Proverite server logove za detalje.'
       };
-      setMessages(prev => [...prev, errorMessage]);
+      pushMessage(errorMessage);
     }
   };
 
@@ -384,26 +571,26 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
     // Ako korisnik započinje novu objavu (a ne zamenu pozadine), očisti kontekst prethodne slike
     if (newPostReq && !wantsReplaceBg) {
       setLastImageFile(null);
-      setLastBgIntentText('');
+      // reset implicit context
     }
 
     // Prikaži sliku u poruci samo ako je nova priložena ili ako se eksplicitno menja pozadina
     const fileForThisMessage = attachedFile || (wantsReplaceBg ? lastImageFile : null);
     const userImageUrl = fileForThisMessage ? URL.createObjectURL(fileForThisMessage) : undefined;
     const currentUserMessage: Message = { id: Date.now().toString(), role: 'user', content: inputMessage, imageUrl: userImageUrl };
-    setMessages(prev => [...prev, currentUserMessage]);
-    setLastBgIntentText(inputMessage);
+    pushMessage(currentUserMessage);
+    // store intent in chat content
     setInputMessage('');
     setIsLoading(true);
 
     // Ako je zahtev za promenu pozadine → obradi odmah preko Ideogram endpointa
     if (wantsReplaceBg) {
       if (!fileForThisMessage) {
-        setMessages(prev => [...prev, { id: `need_img_${Date.now()}`, role: 'assistant', content: 'Dodajte sliku pomoću ikone spajalice ispod, pa ponovo pošaljite: “zameni/promeni pozadinu”.' }]);
+        pushMessage({ id: `need_img_${Date.now()}`, role: 'assistant', content: 'Dodajte sliku pomoću ikone spajalice ispod, pa ponovo pošaljite: “zameni/promeni pozadinu”.' });
         setIsLoading(false);
         return;
       }
-      setMessages(prev => [...prev, { id: `rb_wait_${Date.now()}`, role: 'assistant', content: 'U redu, menjam pozadinu na fotografiji. Molimo sačekajte…' }]);
+      pushMessage({ id: `rb_wait_${Date.now()}`, role: 'assistant', content: 'U redu, menjam pozadinu na fotografiji. Molimo sačekajte…' });
       await handleRemoveBackground(fileForThisMessage, currentUserMessage.content);
       return;
     }
@@ -442,11 +629,11 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
       try {
         const parsedResponse = JSON.parse(aiMessageContent);
 
-        setMessages(prev => [...prev, {
+        pushMessage({
           id: Date.now().toString(),
           role: 'assistant',
           content: 'U redu, pripremam vašu objavu. Generisanje slike može potrajati 15-20 sekundi...'
-        }]);
+        });
 
         const promptForImage = parsedResponse.notes || currentUserMessage.content;
         const detectedSize = detectSizeFromText(currentUserMessage.content);
@@ -459,7 +646,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
       } catch (e) {
         console.error('Failed to parse AI response as JSON or generate image:', e);
         const newAssistantMessage: Message = { id: Date.now().toString() + 'a', role: 'assistant', content: 'Došlo je do greške pri obradi odgovora. Molim vas pokušajte ponovo.' };
-        setMessages(prev => [...prev, newAssistantMessage]);
+        pushMessage(newAssistantMessage);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -468,7 +655,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
         role: 'assistant',
         content: 'Došlo je do greške prilikom komunikacije sa AI asistentom. Proverite konzolu za detalje.'
       };
-      setMessages(prev => [...prev, errorMessage]);
+      pushMessage(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -494,6 +681,13 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
           <div className="p-6 border-b border-white/10 flex justify-between items-center">
             <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Social Media Asistent</h1>
             <div className="flex items-center gap-3">
+              <button
+                onClick={restartChat}
+                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#F56E36] to-[#d15a2c] text-white/90 hover:text-white shadow-md text-xs"
+                title="Restartuj chat"
+              >
+                Restartuj chat
+              </button>
               <button onClick={async () => { if (!isHistoryOpen) await loadHistory(); setIsHistoryOpen(prev => !prev); }} className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/15 text-xs">Istorija (7 dana)</button>
               <div className="px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20 text-xs text-green-400 font-semibold flex items-center space-x-1.5 shadow-[0_0_10px_rgba(52,211,153,0.5)]">
                 <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -505,21 +699,22 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
           <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
             {/* Istorija - modal */}
             {isHistoryOpen && (
-              <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center">
-                <div className="bg-editor-gradient w-[92vw] h-[86vh] rounded-2xl border border-white/10 shadow-2xl p-6 overflow-hidden">
-                  <div className="flex justify-between items-center mb-3">
+              <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm">
+                <div className="w-full h-full bg-editor-gradient border border-white/10 shadow-2xl p-6 overflow-hidden">
+                  <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-white">Istorija (poslednjih 7 dana)</h3>
                     <button onClick={() => setIsHistoryOpen(false)} className="text-white/70 hover:text-white">Zatvori</button>
                   </div>
-                  <div className="overflow-auto pr-1 h-[74vh] grid grid-cols-3 gap-4">
+                  <div className="overflow-auto pr-1 h-[calc(100vh-96px)] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {historyItems.map((it) => (
-                      <div key={it.id} className="p-3 bg-black/20 rounded-xl border border-white/10 hover:bg-black/25 transition-colors">
-                        <img src={it.image_url} className="w-full aspect-square object-cover rounded-lg mb-2" />
+                      <div key={it.id} className="self-start p-3 rounded-xl hover:bg-black/20 transition-colors">
+                        <div className="rounded-xl overflow-hidden border border-white/10 mb-2">
+                          <img src={it.image_url} className="w-full aspect-square object-cover" />
+                        </div>
                         <div className="text-white/90 text-sm truncate mb-1">{it.title || (it.type === 'bg_replace' ? 'Zamenjena pozadina' : 'Generisana objava')}</div>
                         <div className="text-[11px] text-white/50 mb-2">{new Date(it.created_at).toLocaleString()}</div>
-                        <div className="flex gap-2">
-                          <button onClick={() => { setSocialPost({ title: it.title || 'Objava', caption: it.caption || '', hashtags: it.hashtags || [], imageUrl: it.image_url, size: it.size || '1024x1024', cta: it.cta || 'Saznaj više' }); setIsHistoryOpen(false); }} className="flex-1 text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Otvori</button>
-                          <a href={it.image_url} target="_blank" className="text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Slika</a>
+                        <div className="flex">
+                          <button onClick={() => { setSocialPost({ title: it.title || 'Objava', caption: it.caption || '', hashtags: it.hashtags || [], imageUrl: it.image_url, size: it.size || '1024x1024', cta: it.cta || 'Saznaj više' }); setIsHistoryOpen(false); }} className="w-full text-xs px-2 py-1 rounded bg-white/10 border border-white/15 text-white/80 hover:text-white">Otvori</button>
                         </div>
                       </div>
                     ))}

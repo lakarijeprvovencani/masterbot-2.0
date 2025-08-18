@@ -16,8 +16,6 @@ import WelcomeMascot from './components/WelcomeMascot' // Importuj novu komponen
 import OnboardingPointer from './components/OnboardingPointer' // Importuj novu komponentu
 import { ChatProvider } from './contexts/ChatContext'
 import { 
-  ProtectedRoute, 
-  AuthOnlyRoute, 
   OnboardingRoute, 
   DashboardRoute, 
   PublicRoute 
@@ -150,10 +148,23 @@ const Dashboard: React.FC = () => {
 }
 
 const SettingsScreen: React.FC = () => {
+  const { signOut } = useAuth()
+  const navigate = useNavigate()
+
   const handleResetMascot = () => {
     localStorage.removeItem('onboardingTourCompleted');
     alert('Vodič dobrodošlice će se ponovo pojaviti pri sledećoj poseti dashboardu.');
   };
+
+  const handleLogout = async () => {
+    try {
+      await signOut()
+    } catch (e) {
+      console.warn('signOut error', e)
+    } finally {
+      navigate('/', { replace: true })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#0D1240] to-[#040A3E]">
@@ -165,7 +176,7 @@ const SettingsScreen: React.FC = () => {
             <p className="text-white/50 mt-1">Upravljajte vašim nalogom i podešavanjima aplikacije.</p>
           </header>
           
-          <div className="bg-[#0D1240]/60 border border-white/10 rounded-2xl p-6">
+          <div className="bg-[#0D1240]/60 border border-white/10 rounded-2xl p-6 space-y-8">
             <h2 className="text-xl font-semibold mb-4">Pomoćnik Dobrodošlice</h2>
             <p className="text-white/70 mb-4">Ako želite da ponovo vidite poruku dobrodošlice od našeg AI pomoćnika, kliknite na dugme ispod.</p>
             <button 
@@ -174,6 +185,17 @@ const SettingsScreen: React.FC = () => {
             >
               Prikaži Vodič Ponovo
             </button>
+
+            <div className="border-t border-white/10 pt-6">
+              <h2 className="text-xl font-semibold mb-4">Nalog</h2>
+              <p className="text-white/70 mb-4">Odjavite se sa naloga i vratite na prijavu.</p>
+              <button
+                onClick={handleLogout}
+                className="px-5 py-2 rounded-lg bg-gradient-to-r from-[#F56E36] to-[#d15a2c] text-white font-semibold hover:opacity-90 transition-opacity duration-300 shadow-lg"
+              >
+                Odjavi se
+              </button>
+            </div>
           </div>
         </div>
       </div>

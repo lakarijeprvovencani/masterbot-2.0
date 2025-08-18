@@ -152,6 +152,19 @@ const AIChat: React.FC<AIChatProps> = ({ isControlled = false, controlledIsOpen 
     }
   }
 
+  const handleRestart = () => {
+    const confirmed = window.confirm('Da li ste sigurni da želite da restartujete chat?');
+    if (!confirmed) return;
+    setMessages([]);
+    const personalizedMessage = generatePersonalizedMessage(profile as any, userBrain as any)
+    setMessages([{
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: normalizeGreeting(personalizedMessage),
+      timestamp: new Date()
+    }])
+  }
+ 
   return (
     <div className="bg-[#0D1240]/60 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl max-w-3xl mx-auto overflow-hidden font-sans transition-all duration-500">
       <div 
@@ -172,6 +185,13 @@ const AIChat: React.FC<AIChatProps> = ({ isControlled = false, controlledIsOpen 
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             <span>ONLINE</span>
           </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleRestart(); }}
+            className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#F56E36] to-[#d15a2c] text-white/90 hover:text-white shadow-md text-xs"
+            title="Restartuj chat"
+          >
+            Restartuj chat
+          </button>
           <button className="text-white/70 hover:text-white transition-transform duration-300" style={{ transform: isOpen ? 'rotate(0deg)' : 'rotate(180deg)' }}>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
