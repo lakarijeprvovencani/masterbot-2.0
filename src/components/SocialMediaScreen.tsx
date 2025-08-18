@@ -682,8 +682,7 @@ Ceo tvoj odgovor mora biti samo JSON objekat i ništa više.
             <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Social Media Asistent</h1>
             <div className="flex items-center gap-3">
               <a
-                href="/tools/feedback/index.html"
-                target="_blank"
+                href="/feedback"
                 className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/15 text-xs"
               >
                 Predlozi i komentari

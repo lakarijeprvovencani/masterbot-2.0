@@ -72,8 +72,7 @@ const Sidebar: React.FC = () => {
           </nav>
           <div className="mt-4 mx-3">
             <a
-              href="/tools/feedback/index.html"
-              target="_blank"
+              href="/feedback"
               className="flex items-center py-3 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-colors"
             >
               <div className="px-3 text-[#F56E36]">💬</div>

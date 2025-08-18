@@ -311,6 +311,23 @@ const AppContent: React.FC = () => {
           </DashboardRoute>
         } 
       />
+
+      {/* Feedback tool embedded route (served from /public/tools/feedback) */}
+      <Route 
+        path="/feedback" 
+        element={
+          <DashboardRoute>
+            <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#0D1240] to-[#040A3E]">
+              <Sidebar />
+              <div className="pl-20 md:pl-72 py-6 pr-4 md:pr-10">
+                <div className="bg-[#0D1240]/60 border border-white/10 rounded-2xl overflow-hidden shadow-2xl" style={{height:'calc(100vh - 4rem)'}}>
+                  <iframe src="/tools/feedback/index.html" title="Predlozi i komentari" className="w-full h-full" />
+                </div>
+              </div>
+            </div>
+          </DashboardRoute>
+        } 
+      />
       
       {/* Catch-all route */}
       <Route path="*" element={<PublicRoute><AuthPage /></PublicRoute>} />
