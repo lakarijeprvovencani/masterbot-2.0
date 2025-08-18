@@ -4,10 +4,7 @@ import { LogOut } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 const Header = () => {
-  const {
-    user,
-    signOut
-  } = useAuth();
+  const { user, signOut } = useAuth();
   const getUserInitials = (email: string) => {
     return email.substring(0, 2).toUpperCase();
   };
@@ -28,7 +25,8 @@ const Header = () => {
               <p className="text-xs text-blue-200 hidden md:block"></p>
             </div>
           </div>
-          
+
+          {/* U embedded modu sakrij profil/odjavu ako nema korisnika iz spoljne app */}
           {user && <div className="flex-shrink-0 ml-auto">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
