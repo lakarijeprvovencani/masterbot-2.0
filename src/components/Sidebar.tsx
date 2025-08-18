@@ -5,6 +5,7 @@ import logoSrc from '../assets/images/logobotprovidan.png'
 const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: 'home' as const },
   { label: 'Biznis profil', path: '/business-profile', icon: 'book' as const },
+  { label: 'Predlozi i komentari', path: '/feedback', icon: 'home' as const },
 ]
 
 const Icon: React.FC<{ name: 'home' | 'book' | 'settings' | 'toggle'; className?: string, open?: boolean }> = ({ name, className, open }) => {
@@ -70,15 +71,6 @@ const Sidebar: React.FC = () => {
               )
             })}
           </nav>
-          <div className="mt-4 mx-3">
-            <a
-              href="/feedback"
-              className="flex items-center py-3 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-colors"
-            >
-              <div className="px-3 text-[#F56E36]">💬</div>
-              <span className={`${open ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}>Predlozi i komentari</span>
-            </a>
-          </div>
         </div>
 
         {/* Footer */}

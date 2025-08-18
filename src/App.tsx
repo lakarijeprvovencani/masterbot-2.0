@@ -312,16 +312,23 @@ const AppContent: React.FC = () => {
         } 
       />
 
-      {/* Feedback tool embedded route (served from /public/tools/feedback) */}
+      {/* Feedback tool now mounted as native route using our auth and DB */}
       <Route 
         path="/feedback" 
         element={
           <DashboardRoute>
+            {/* Direktno renderujemo feedback modul kao React komponentu */}
             <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#0D1240] to-[#040A3E]">
               <Sidebar />
-              <div className="pl-20 md:pl-72 py-6 pr-4 md:pr-10">
-                <div className="bg-[#0D1240]/60 border border-white/10 rounded-2xl overflow-hidden shadow-2xl" style={{height:'calc(100vh - 4rem)'}}>
-                  <iframe src="/tools/feedback/index.html" title="Predlozi i komentari" className="w-full h-full" />
+              <div className="pl-20 md:pl-72 py-8 pr-4 md:pr-10">
+                <div className="max-w-7xl mx-auto">
+                  <div className="bg-[#0D1240]/60 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+                    {/* Mount point */}
+                    <div className="p-0">
+                      {/** @ts-expect-error: local module import **/}
+                      {require('./modules/feedback/feedback-bolt-hub-main/src/pages/Dashboard').default()}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

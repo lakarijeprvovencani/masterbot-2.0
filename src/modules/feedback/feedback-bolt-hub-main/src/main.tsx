@@ -1,5 +1,2 @@
-import { createRoot } from 'react-dom/client'
-import App from './App.tsx'
-import './index.css'
-
-createRoot(document.getElementById("root")!).render(<App />);
+// Embedded mode: ovaj entry fajl se ne koristi kada se alat montira unutar glavne aplikacije.
+export {}
