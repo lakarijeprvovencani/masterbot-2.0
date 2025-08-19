@@ -5,7 +5,6 @@ import logoSrc from '../assets/images/logobotprovidan.png'
 const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: 'home' as const },
   { label: 'Biznis profil', path: '/business-profile', icon: 'book' as const },
-  { label: 'Predlozi i komentari', path: '/feedback', icon: 'home' as const },
 ]
 
 const Icon: React.FC<{ name: 'home' | 'book' | 'settings' | 'toggle'; className?: string, open?: boolean }> = ({ name, className, open }) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AuthForm } from './components/AuthForm'
@@ -312,29 +312,7 @@ const AppContent: React.FC = () => {
         } 
       />
 
-      {/* Feedback tool now mounted as native route using our auth and DB */}
-      <Route 
-        path="/feedback" 
-        element={
-          <DashboardRoute>
-            {/* Direktno renderujemo feedback modul kao React komponentu */}
-            <div className="min-h-screen bg-gradient-to-br from-[#040A3E] via-[#0D1240] to-[#040A3E]">
-              <Sidebar />
-              <div className="pl-20 md:pl-72 py-8 pr-4 md:pr-10">
-                <div className="max-w-7xl mx-auto">
-                  <div className="bg-[#0D1240]/60 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-                    {/* Mount point */}
-                    <div className="p-0">
-                      {/** @ts-expect-error: local module import **/}
-                      {require('./modules/feedback/feedback-bolt-hub-main/src/pages/Dashboard').default()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </DashboardRoute>
-        } 
-      />
+      {/* Feedback modul privremeno uklonjen */}
       
       {/* Catch-all route */}
       <Route path="*" element={<PublicRoute><AuthPage /></PublicRoute>} />
